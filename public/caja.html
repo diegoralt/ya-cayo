@@ -62,6 +62,13 @@
   .m { border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--bg); } .m b { display:block; font:800 1.45rem var(--mono); font-variant-numeric:tabular-nums; }
   .err { color:var(--bad); background:var(--badbg); border:1px solid #e49a9d; border-radius:10px; padding:8px 12px; margin-top:10px; font-weight:600; } .err:empty { display:none; }
   #resumen2 { overflow-wrap:anywhere; } .cab > div { min-width:0; }
+  .ag { border:1.5px dashed var(--ac); border-radius:12px; padding:10px; margin-bottom:12px; background:#fff7fb; }
+  .ag summary { font-weight:700; min-height:44px; list-style:none; cursor:pointer; display:flex; align-items:center; gap:6px; flex-wrap:wrap; } .ag .rotulo { margin-left:4px; }
+  .menu { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin:8px 0; }
+  .menu button { text-align:left; display:flex; justify-content:space-between; gap:6px; min-height:48px; }
+  .menu b { font-family:var(--mono); }
+  #agtxt { margin-bottom:6px; } #agres { margin:8px 0; font-size:.92rem; } #agres ul { margin:4px 0; padding-left:18px; }
+  .demo { display:flex; gap:8px; align-items:flex-start; font-size:.85rem; margin:6px 0 0; } .demo input { width:auto; margin-top:3px; }
   #red { margin:0; } #loginerr { margin-top:0; margin-bottom:10px; }
 </style>
 </head>
@@ -101,6 +108,14 @@
 
   <section id="app" class="card" hidden>
     <h2>Nuevo cobro</h2>
+        <details class="ag" id="agente" open>
+      <summary>Agente de captura <span class="rotulo">simulado con reglas, sin IA</span></summary>
+      <input id="agtxt" autocomplete="off" placeholder="Ej.: dos cafés y un pan" aria-label="Qué hay que cobrar">
+      <button type="button" id="agbtn" class="p">Proponer cobro</button>
+      <div class="menu" id="menu" aria-label="Menú"></div>
+      <div id="agres" class="mut" role="status" aria-live="polite"></div>
+      <label class="demo"><input type="checkbox" id="demo" checked><span><b>Modo demo:</b> el total de lista es ilustrativo y el cobro real es de <b>$0.01</b>. Desmárcalo para cobrar el total (máx. $50).</span></label>
+    </details>
     <label class="campo"><span>Concepto del ticket</span><input id="concepto" autocomplete="off" value="Ticket 1 · 2 cafés"></label>
     <label class="campo"><span>Precio de lista (MXN, máx. $50 en la demo)</span><input id="monto" inputmode="decimal" autocomplete="off" value="0.01"></label>
     <details class="reco">
@@ -241,6 +256,32 @@ $('nuevo').onclick = () => { $('app').scrollIntoView({ block: 'start' }); $('con
 $('voz').onclick = () => { vozOn = !vozOn; $('voz').setAttribute('aria-pressed', vozOn); $('voz').textContent = vozOn ? '🔊 Voz activada' : '🔇 Voz silenciada'; if (vozOn) voz('Voz activada'); };
 let wl; async function pantalla() { try { wl = await navigator.wakeLock?.request('screen'); } catch {} }
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && pin && pantalla());
+
+// Agente simulado: reglas, sin IA. Solo PROPONE concepto y monto; el cajero sigue pulsando «Cobrar». El servidor fija el monto del QR.
+const MENU = [{ id: 'cafe', n: 'Café', pl: 'Cafés', p: 30, re: /\bcafes?\b|americanos?/ }, { id: 'capu', n: 'Capuchino', pl: 'Capuchinos', p: 40, re: /capuchinos?/ }, { id: 'pan', n: 'Pan dulce', pl: 'Panes dulces', p: 15, re: /\bpan(es)?\b|conchas?/ }, { id: 'jugo', n: 'Jugo', pl: 'Jugos', p: 25, re: /jugos?/ }];
+const NUM = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+let cant = {};
+function proponer(texto) { // → { cant: {id: n}, noEntendido: bool }
+  const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), out = {};
+  for (const it of MENU) { const m = it.re.exec(t); if (!m) continue; const antes = t.slice(0, m.index).trim().split(/\s+/).slice(-2); let q = 1; for (const w of antes.reverse()) { if (/^\d+$/.test(w)) { q = +w; break; } if (NUM[w]) { q = NUM[w]; break; } } out[it.id] = Math.min(q, 20); }
+  return { cant: out, noEntendido: Object.keys(out).length === 0 };
+}
+function pintaAg() {
+  const sel = MENU.filter((i) => cant[i.id] > 0), total = sel.reduce((a, i) => a + cant[i.id] * i.p, 0);
+  $('menu').innerHTML = '';
+  for (const i of MENU) { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Agregar ' + i.n); const a = document.createElement('span'); a.textContent = (cant[i.id] ? cant[i.id] + '× ' : '') + i.n; const c = document.createElement('b'); c.textContent = '$' + i.p; b.append(a, c); b.onclick = () => { cant[i.id] = (cant[i.id] || 0) + 1; pintaAg(); }; $('menu').append(b); }
+  const r = $('agres'); r.innerHTML = '';
+  if (!sel.length) return;
+  const ul = document.createElement('ul'); for (const i of sel) { const li = document.createElement('li'); li.textContent = `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n} · $${cant[i.id] * i.p}`; ul.append(li); }
+  const d = document.createElement('div'); d.textContent = `Total de lista: $${total}` + ($('demo').checked ? ' (ilustrativo) · cobro de demo: $0.01' : '');
+  const lim = document.createElement('button'); lim.type = 'button'; lim.textContent = 'Vaciar'; lim.onclick = () => { cant = {}; pintaAg(); };
+  r.append(ul, d, lim);
+  $('concepto').value = (($('demo').checked ? 'Demo ' : '') + sel.map((i) => `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
+  $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); pintaReco();
+}
+$('agbtn').onclick = () => { const p = proponer($('agtxt').value); if (p.noEntendido) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } cant = p.cant; pintaAg(); };
+$('agtxt').onkeydown = (e) => e.key === 'Enter' && $('agbtn').click();
+$('demo').onchange = pintaAg; pintaAg();
 muestra(); pantalla(); pintaReco(); refrescar(); setInterval(refrescar, 2000); setInterval(pintaDetalle, 1000);
 </script>
 </body>
