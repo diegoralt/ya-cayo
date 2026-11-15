@@ -34,11 +34,14 @@ if [ -r .env ]; then
     valor=$(printf '%s' "$valor" | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//')
     printf '%s' "$clave" | grep -qE "$CLAVES_SECRETAS" || continue
     [ ${#valor} -ge 4 ] || continue
+    # DEMO_PIN es público por decisión de Diego (2026-11-15): se permite solo en README.md e instrucciones.md y en el historial.
+    # Cualquier otra clave, y el PIN en cualquier otro archivo o en las respuestas de la URL pública, sigue siendo hallazgo.
     while IFS= read -r f; do
       [ -f "$f" ] || continue
+      [ "$clave" = DEMO_PIN ] && case "$f" in README.md|docs/entrega/instrucciones.md) continue ;; esac
       grep -qF -e "$valor" "$f" 2>/dev/null && hallazgo "valor de $clave aparece en $f"
     done < "$TMP/archivos"
-    grep -qF -e "$valor" "$TMP/historial" && hallazgo "valor de $clave aparece en el historial de git"
+    [ "$clave" = DEMO_PIN ] || { grep -qF -e "$valor" "$TMP/historial" && hallazgo "valor de $clave aparece en el historial de git"; }
   done < "$TMP/env"
 fi
 

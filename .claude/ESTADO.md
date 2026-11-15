@@ -1,6 +1,7 @@
 # Estado — ya-cayo
 
-> **Cambios en curso (en este orden):** 1) `docs/changes/2026-11-15-hosting-vercel/` (Vercel + Supabase; solo intent, falta fase 1 de revisión, plan y aprobación); 2) `docs/changes/2026-11-15-agente-v2/` (plan aprobado por Diego; se implementa después del hosting y sus hitos se reescriben sobre Postgres). Sin código hasta aprobar el plan del hosting.
+> **Cambios en curso (en este orden):** 1) `docs/changes/2026-11-15-hosting-vercel/` — intent y plan revisados por Codex; **siguiente: H1** (`scripts/pg-test.sh` + esquema RLS; requiere Docker Desktop arrancado o un proyecto Supabase de pruebas). Diego debe tener listos: proyecto Supabase, cuenta Vercel enlazada al repo, acceso a DNS de Cloudflare y al portal de pey. 2) `docs/changes/2026-11-15-agente-v2/` — plan aprobado; se implementa después y sus hitos se reescriben sobre Postgres.
+> **PIN público (decisión de Diego, 2026-11-15):** README e `instrucciones.md` publican el PIN 147369; **`DEMO_PIN` en `.env` (y luego en Vercel) debe ser ese mismo valor** o la demo rechazará a quien lo use. Siguiente: commits separados (hosting-vercel y PIN/barrido), `sh scripts/barrido-secretos.sh`, y rotar el PIN tras el 14-dic. El barrido permite `DEMO_PIN` solo en esos dos archivos. Con PIN público, el tope atómico (H5 del hosting) y el presupuesto del agente pasan a ser prioritarios.
 
 > Se sobrescribe cada sesión. Última actualización: 2026-11-15 (sesión larga; seguir en sesión nueva tras `/clear`).
 

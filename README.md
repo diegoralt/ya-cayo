@@ -2,12 +2,12 @@
 
 Caja de mostrador que cobra con CoDi mediante la API de pey y solo da por pagado lo que el servidor confirma (webhook firmado + polling de respaldo). Una entrega por cobro; ninguna captura de pantalla cuenta como pago.
 
-- **Demo en vivo:** https://pey.drkingsia.com (el PIN va en el formulario de entrega).
+- **Demo en vivo:** https://pey.drkingsia.com · **PIN de la caja: `147369`** (PIN de demo, solo para evaluar; se rota al terminar la evaluación).
 - **Descripción e instrucciones de prueba:** `docs/entrega/`.
 - **Ejecutar:** copia `.env.example` a `.env`, completa los valores y corre `npm install && npm start`. Pruebas: `node --test`.
 
 ## Cómo probar (para el jurado)
-**Demo pública:** https://pey.drkingsia.com · el PIN de la caja viene en el formulario de entrega. Sin celular con CoDi puedes recorrer los pasos 1 a 3 y ver el video; el pago real cuesta $0.01 MXN.
+**Demo pública:** https://pey.drkingsia.com · PIN de la caja: `147369`. Sin celular con CoDi puedes recorrer los pasos 1 a 3 y ver el video; el pago real cuesta $0.01 MXN.
 
 1. Abre la URL en un celular o tablet y escribe el PIN: verás la **caja**.
 2. En el asistente escribe «dos cafés y un pan» y pulsa **Proponer cobro** (por reglas, sin IA). Con «Cobro de prueba» marcado, el total de lista es ilustrativo y se cobra $0.01. Pulsa **Cobrar con CoDi**.
