@@ -18,7 +18,7 @@
 - Guía «¿Aún no tienes CoDi?» para el pagador, con ilustraciones genéricas.
 
 **Qué es real y qué es simulado**
-- Los cobros son de $0.01 MXN. Al cierre de este corte no se ha verificado un pago real de punta a punta: la firma real del webhook y el formato real del QR de pey están sin validar. La lógica se probó con 26 pruebas automáticas y un pey simulado; el pago real queda para el 2.º corte.
+- Los cobros son de $0.01 MXN. Se verificaron pagos reales de $0.01 el 15-nov-2026: el servidor los confirmó por polling en 1 a 3 s y el webhook `codi.qr.payment_received` llegó con firma Standard Webhooks válida (pey registró 200 y el servidor guardó el evento). Los casos de reenvío, pago tardío, duplicado y consulta fallida solo se probaron con 26 pruebas automáticas y un pey simulado. Limitación conocida: Bot Fight Mode de Cloudflare (plan gratuito) desafía los envíos del webhook de pey; para la demo se apagó en la zona y para el 2.º corte se moverá a un host sin ese bloqueo.
 - Los perfiles de caja son ficticios y el QR vencido del video está preparado; ambos se rotulan.
 - Las mediciones «antes» son 3 cronometrajes manuales.
 

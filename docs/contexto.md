@@ -111,3 +111,10 @@ Leídos por un subagente de lectura; las citas largas vienen parafraseadas (lím
 
 ## Ronda 3 (2026-11-14) · foco adopción · (análisis archivado fuera del repo)
 Decisiones del usuario: varios comercios, el comercio primero, adopción como filtro. Los tres puntuadores coinciden en la **caja de mostrador con confirmación del servidor** como mejor candidato. Codex señala que los términos de pey exigen autorización escrita para plataformas que registran comercios: diseño defendible = replicable por comercio (key propia), una instancia con titular único en el hackatón. Pendiente: que el usuario confirme ese ajuste a «varios comercios» y el nombre; luego crear el proyecto.
+
+## Evidencia verificada con pagos reales de $0.01 (15-nov-2026)
+- `qrImage` = PNG en base64; `qr_string` = JSON `{"TYP":20,…`. pey quita `$` y `.` del concepto.
+- Webhook `codi.qr.payment_received`: cuerpo PLANO (sin `data`): `type`, `codiQrId`, `transactionId`, `amount`, `datePaid`, `numRef`, `concept`, `apiKeyId`, `bankAccountId`, `metadata`. Firma Standard Webhooks válida con `PEY_WEBHOOK_SECRET`; el `webhook-id` (`msg_…`) coincide con el «Request ID» de los logs de pey y se guarda en `eventos`.
+- Docs de pey no publican IPs de origen, User-Agent, reintentos ni timeout. Observado: origen en AWS, `python-requests/2.32.3`.
+- **Cloudflare:** Bot Fight Mode (plan gratuito) desafía el POST de pey con 403 «Just a moment...»; no se puede saltar con reglas WAF/Page Rules (solo IP Access Rules, frágiles). Con el interruptor apagado llegó el 200. Estable: host fuera de ese bloqueo o Super Bot Fight Mode con Skip.
+- No publicar CLABE ni `trackingKey` (salen en el payload).

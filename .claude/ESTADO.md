@@ -1,13 +1,13 @@
 # Estado — ya-cayo
 
-> Se sobrescribe cada sesión. Última actualización: 2026-11-14 (cierre de sesión larga; seguir en sesión nueva tras `/clear`).
+> Se sobrescribe cada sesión. Última actualización: 2026-11-15 (sesión larga; seguir en sesión nueva tras `/clear`).
 
-## Siguiente acción (en este orden; el plan manda: `docs/changes/2026-11-14-ya-cayo-primer-corte/plan.md`, primera casilla vacía)
-1. **H4, resto:** `checklist-e2e.md` ya escrito (ejecutarlo con el pago real, tras H0/H1); `public/caja.html` y `public/pagar.html` revisadas en vista de celular (390 px) con un pey simulado: esperando → pagado → entregado, sin desborde. Falta verlas con un QR real de pey y en tablet. Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
-2. **H6 (1.er corte, dom 15-nov 1:00 PM):** repo público https://github.com/diegoralt/ya-cayo (solo `main`). Textos listos en `docs/entrega/*.local.md` (ignorados; llevan PIN, nombre del titular de la CLABE de prueba y correo de Diego) y versiones sin datos personales en `descripcion.md`/`instrucciones.md`. Descripción declara honestamente que NO hay pago real verificado. **Falta:** video ≤ 3 min (QR vencido preparado y rotulado; sin H1 no hay cobro real de inicio a fin: decidir con Diego qué se muestra) y enviar el formulario. Repetir `sh scripts/barrido-secretos.sh https://pey.drkingsia.com` antes de cada push. Rotar el PIN de demo tras el evento.
-3. **H0 hecho:** Diego verificó `curl https://pey.drkingsia.com/health` → `{"ok":true,"app":"ya-cayo"}` (el 14-nov).
-4. **H1 (bloqueado):** nadie con CoDi para pagar $0.01. H3 y el e2e de H4 quedan abiertos hasta H1.
-Entrega: dom 15-nov 1:00 PM CDMX; congelar alcance 10:30; formulario 12:00.
+## Siguiente acción (15-nov; entrega 1:00 PM CDMX, formulario 12:00)
+1. **Webhook verificado** (200 en pey, fila en `eventos`, firma válida; detalle en `docs/contexto.md`). Bot Fight Mode quedó encendido otra vez: bloquea los envíos de pey. Antes del 2.º corte elegir: host fuera de ese bloqueo (H7), zona aparte o Super Bot Fight Mode con Skip.
+2. **Textos de entrega actualizados** (pago real por polling + webhook firmado verificado; reenvío/tardío/duplicado/consulta fallida solo con pey simulado). Revisar y quitar el aviso de borrador antes de enviar.
+3. **UI de `caja.html`/`pagar.html`:** rediseño (ticket térmico, sello «Ya cayó», barra de vigencia) en el árbol SIN commit. Falta revisar en captura los estados vencido/tardío/duplicado y la caja en celular. Esperando OK de Diego para commit (`feat(ui): ...`); barrido de secretos antes del push. Después: revisión a ciegas de Codex (diff + capturas) y revisar límite de intentos del PIN y tokens de `/pagar` no adivinables.
+4. **Video ≤ 3 min y formulario** pendientes. Probar con pago real: entregar, reenvío, tardío, duplicado.
+5. Skill `orca-cli`: Diego debe revisarla y aceptarla (`sh ~/.claude/hooks/session-start-skills.sh --aceptar`).
 
 ## Estado del trabajo
 Maqueta confirmada por Diego (se mejora solo si hace falta). H4 implementado en local (rutas, PIN, tope, máx. 3 vivos, `pagada_en`, `/pagar/:token`, métricas; `node --test` 26/26), commiteado. Preguntar a Diego antes de cada commit.
@@ -21,7 +21,7 @@ Hay una sonda desechable fuera del repo en el scratchpad de la sesión anterior 
 - Hosting: túnel Cloudflare con subdominio propio desde el Mac de Diego; migrar a host fijo (H7) tras el envío. Presupuesto: Claude ≤ 6M, Codex ≤ 5% semanal.
 
 ## Decisiones abiertas
-- Quién paga el QR de prueba (H1); «polling solo» solo con aprobación escrita de Diego.
+- «Polling solo» (sin webhook) solo con aprobación escrita de Diego; H1 resuelto: Diego ya pagó con CoDi.
 - ¿La cuenta permite `stripe` (respaldo con tarjeta)? Portal → Perfil → Finanzas.
 - Normativa/contrato de adquirente sobre bonos por método de pago: NO VERIFICADO.
 - Agente #1 (H5; decide dom 9:00); `docs/agentes.md`/`contrato-agentes: v1`; `integración: push`; titular real a declarar; qué análisis de `docs/` se publica.

@@ -25,7 +25,7 @@ Un celular con la app de un banco con CoDi activo, para pagar $0.01 MXN real. Si
 - **Recomendación al vendedor:** es una estimación con supuesto (3 %) y el sistema no cambia el precio.
 
 ## Lo que no hace
-No reembolsa (pey no lo permite por API: una devolución es un registro manual). Un pago hecho después del vencimiento queda como «tardío» y un segundo pago del mismo ticket como «duplicado»; ninguno genera otra entrega. Hasta este corte ningún caso se ha probado con un pago real: están cubiertos solo por pruebas automáticas con un pey simulado. Si no tienes CoDi, esta es la forma de revisar el comportamiento (`node --test`).
+No reembolsa (pey no lo permite por API: una devolución es un registro manual). Un pago hecho después del vencimiento queda como «tardío» y un segundo pago del mismo ticket como «duplicado»; ninguno genera otra entrega. Con pago real se verificaron la confirmación por polling y el webhook firmado; el reenvío, el pago tardío, el duplicado y la consulta fallida están cubiertos solo por pruebas automáticas con un pey simulado. Si no tienes CoDi, esta es la forma de revisar ese comportamiento (`node --test`).
 
 ## Pruebas automáticas
 `npm install` y `node --test` (26 pruebas: entrega única, firma del webhook, polling, límites). Para correr local: copiar `.env.example` a `.env`, completar valores y `npm start`.
