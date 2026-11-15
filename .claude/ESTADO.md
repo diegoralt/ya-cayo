@@ -2,12 +2,16 @@
 
 > Se sobrescribe cada sesión. Última actualización: 2026-11-15 (sesión larga; seguir en sesión nueva tras `/clear`).
 
-## Siguiente acción (15-nov; entrega 1:00 PM CDMX, formulario 12:00)
-1. **Webhook verificado** (200 en pey, fila en `eventos`, firma válida; detalle en `docs/contexto.md`). Bot Fight Mode quedó encendido otra vez: bloquea los envíos de pey. Antes del 2.º corte elegir: host fuera de ese bloqueo (H7), zona aparte o Super Bot Fight Mode con Skip.
-2. **Textos de entrega actualizados** (pago real por polling + webhook firmado verificado; reenvío/tardío/duplicado/consulta fallida solo con pey simulado). Revisar y quitar el aviso de borrador antes de enviar.
-3. **UI (publicada en `main`):** ticket + sello + barra, límite de PIN, ajustes de la revisión ciega de Codex (6/6/5): texto del pagador, doble envío, consultas superpuestas, contraste/foco. Pendiente de esa revisión, sin decidir: reordenar la caja (recientes antes del formulario) y subir originalidad; foco al reconstruir la lista. Correr `sh scripts/barrido-secretos.sh` antes de cada push. `main` protegida (sin force-push ni borrado, historial lineal; Diego puede empujar directo); interacciones externas limitadas a colaboradores hasta 2027-05-15.
-4. **Video final** (1:33, 1600×900, narrado, sin traductor del navegador; 3 tomas con pagos reales de $0.01): `~/Desktop/ya-cayo-video.mp4`. Falta subirlo y llenar el formulario. Asistente de captura por reglas publicado en `main` y declarado en `descripcion.md`. Probar con pago real aún: reenvío, tardío, duplicado. Contexto de la sesión muy largo: seguir en sesión nueva (`/clear`).
-5. Skill `orca-cli`: Diego debe revisarla y aceptarla (`sh ~/.claude/hooks/session-start-skills.sh --aceptar`).
+## Siguiente acción (1.er corte ENVIADO el 15-nov-2026; 2.º corte sáb 12-dic 23:59 CDMX)
+1. **Lunes 16-nov: iniciar el alta de la CLABE propia** (`POST /bank-account`, hasta 5 días hábiles con Banxico); la demo pública del 2.º corte necesita la tuya en `ACTIVE`.
+2. **Rotar el PIN** de la demo (`DEMO_PIN` en `.env`) y reiniciar el servidor: quedó impreso en una sesión.
+3. **Webhook:** Bot Fight Mode (plan gratuito) desafía los envíos de pey y no se puede saltar con reglas (detalle en `docs/contexto.md`). Elegir antes del 2.º corte: host fuera del bloqueo (H7), zona aparte o Super Bot Fight Mode con Skip. Mientras tanto confirma el polling.
+4. **Probar con pago real:** reenvío, tardío, duplicado y consulta fallida (hoy solo con pey simulado).
+5. **Versión 2 (declarada en README y en la descripción):** agente con IA que lista productos y piezas y genera el cobro para CoDi. Regla: propone, el cajero confirma, el servidor decide; sin herramientas de «marcar pagado» ni «entregar». Hoy existe un asistente por reglas en `public/caja.html` (`proponer`).
+6. **UI pendiente de la revisión de Codex (6/6/5):** reordenar la caja (recientes antes del formulario), subir originalidad, foco del teclado al reconstruir la lista. Otros pendientes: titular real a declarar, `docs/agentes.md`, `integración: push`.
+7. Skill `orca-cli`: Diego debe revisarla y aceptarla (`sh ~/.claude/hooks/session-start-skills.sh --aceptar`).
+Antes de cada push: `sh scripts/barrido-secretos.sh`. `main` protegida (sin force-push ni borrado); interacciones externas limitadas a colaboradores hasta 2027-05-15.
+Entregado: repo público, app `pey.drkingsia.com`, video «Ya Cayo Video» en Drive, textos en `docs/entrega/` (los `.local.md` llevan PIN y titular; no se versionan).
 
 ## Estado del trabajo
 Maqueta confirmada por Diego (se mejora solo si hace falta). H4 implementado en local (rutas, PIN, tope, máx. 3 vivos, `pagada_en`, `/pagar/:token`, métricas; `node --test` 26/26), commiteado. Preguntar a Diego antes de cada commit.
