@@ -105,3 +105,15 @@ test('páginas de caja y pagador se sirven; archivos fuera de las dos rutas, no'
   for (const r of ['/.env', '/package.json', '/ya-cayo.sqlite', '/../.env']) assert.equal((await fetch(b + r)).status, 404);
   s.cerrar();
 });
+
+test('cabeceras de seguridad en caja, pagador y API', async () => {
+  const s = await arrancar();
+  for (const ruta of ['/', '/api/ordenes', '/health', '/nada']) {
+    const r = await fetch(`http://127.0.0.1:${s.srv.address().port}${ruta}`);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff', ruta);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY', ruta);
+    assert.equal(r.headers.get('cache-control'), 'no-store', ruta);
+    assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/, ruta);
+  }
+  s.cerrar();
+});

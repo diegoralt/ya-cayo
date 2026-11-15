@@ -18,4 +18,6 @@ El 15-nov-2026 se cobraron y confirmaron pagos reales de $0.01 por polling (1 a 
 
 **Alcance:** una instancia con un único titular (CLABE de prueba de los organizadores; el titular se muestra en la demo); cada comercio despliega la suya con su propia cuenta y API key. Sin reembolso por API.
 
+**Acceso a la demo:** URL y PIN de la caja en el README y en las instrucciones de prueba.
+
 **Tecnología:** Node 24, SQLite, HTML y JS sin framework, `standardwebhooks`, túnel de Cloudflare. Hecho con Claude Code y Codex.

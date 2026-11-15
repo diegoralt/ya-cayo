@@ -2,7 +2,7 @@
 
 
 **URL de la demo (pública, sin invitación):** https://pey.drkingsia.com
-**PIN de la caja:** [PIN de demo: se indica solo en el texto del formulario, no en el repo] · **Repo:** https://github.com/diegoralt/ya-cayo
+**PIN de la caja:** `147369` (PIN de demo, solo para evaluar) · **Repo:** https://github.com/diegoralt/ya-cayo
 
 ## Qué necesitas
 Un celular con la app de un banco con CoDi activo, para pagar $0.01 MXN real. Si no tienes CoDi, puedes recorrer toda la interfaz sin pagar (pasos 1 a 3) y ver el video.
