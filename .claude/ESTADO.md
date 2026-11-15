@@ -3,7 +3,7 @@
 > Se sobrescribe cada sesión. Última actualización: 2026-11-14 (cierre de sesión larga; seguir en sesión nueva tras `/clear`).
 
 ## Siguiente acción (en este orden; el plan manda: `docs/changes/2026-11-14-ya-cayo-primer-corte/plan.md`, primera casilla vacía)
-1. **H4, resto:** `checklist-e2e.md` ya escrito (ejecutarlo con el pago real, tras H0/H1); falta revisar a ojo `public/caja.html` y `public/pagar.html` en celular/tablet (solo se comprobó sintaxis y API; no se han visto en pantalla). Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
+1. **H4, resto:** `checklist-e2e.md` ya escrito (ejecutarlo con el pago real, tras H0/H1); `public/caja.html` y `public/pagar.html` revisadas en vista de celular (390 px) con un pey simulado: esperando → pagado → entregado, sin desborde. Falta verlas con un QR real de pey y en tablet. Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
 2. **H0 hecho:** Diego verificó `curl https://pey.drkingsia.com/health` → `{"ok":true,"app":"ya-cayo"}` (el 14-nov).
 3. **H1 (bloqueado):** nadie con CoDi para pagar $0.01. H3 y el e2e de H4 quedan abiertos hasta H1.
 Entrega: dom 15-nov 1:00 PM CDMX; congelar alcance 10:30; formulario 12:00.
