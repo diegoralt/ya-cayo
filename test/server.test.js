@@ -26,6 +26,14 @@ test('sin PIN o con PIN malo: 401 en todas las rutas de caja', async () => {
   s.cerrar();
 });
 
+test('PIN: tras 10 fallos bloquea con 429 incluso con el PIN correcto', async () => {
+  const s = await arrancar();
+  for (let i = 0; i < 10; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 401);
+  assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 429);
+  assert.equal((await s.f('/api/metricas')).status, 429);
+  s.cerrar();
+});
+
 test('tope de $50, monto inválido y máx. 3 cobros vivos', async () => {
   const s = await arrancar();
   assert.equal((await s.crear(50.01)).status, 400);

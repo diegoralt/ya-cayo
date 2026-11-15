@@ -132,7 +132,7 @@ let pin = ''; try { pin = sessionStorage.getItem('pin') ?? ''; } catch {}
 let ordenes = [], selId = null, comision = 0.03, vozOn = true, previo = {};
 async function api(ruta, init = {}) {
   const r = await fetch('/api' + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json' } });
-  if (r.status === 401) { pin = ''; try { sessionStorage.removeItem('pin'); } catch {} $('loginerr').textContent = 'PIN incorrecto. Inténtalo de nuevo.'; muestra(); $('pin').value = ''; $('pin').focus(); throw new Error('PIN incorrecto'); }
+  if (r.status === 401 || r.status === 429) { pin = ''; try { sessionStorage.removeItem('pin'); } catch {} $('loginerr').textContent = r.status === 429 ? 'Demasiados intentos. Espera un minuto.' : 'PIN incorrecto. Inténtalo de nuevo.'; muestra(); $('pin').value = ''; $('pin').focus(); throw new Error('PIN rechazado'); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error ?? 'error ' + r.status);
   return d;

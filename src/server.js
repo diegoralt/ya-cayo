@@ -8,6 +8,7 @@ import { crearClientePey } from './pey.js';
 const MAX_CUERPO = 64 * 1024;
 export const TOPE_CENTAVOS = 5000; // demo: máx. $50
 export const MAX_VIVOS = 3;
+const MAX_FALLOS = 10, VENTANA_MS = 60_000; // PIN: 10 fallos por minuto y por IP
 // ponytail: solo estas dos páginas se sirven; nunca el directorio del repo ni la base.
 const pagina = (n) => readFileSync(new URL(`../public/${n}`, import.meta.url));
 
@@ -35,6 +36,7 @@ function vistaPublica(v, titular) {
 const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacciones.length });
 
 export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03 }) {
+  const fallos = new Map(); // ponytail: en memoria, una instancia; sin limpieza (pocas IPs). Con varios procesos, pasar a Redis.
   const porToken = (t) => db.prepare('SELECT id FROM ordenes WHERE token=?').get(t)?.id;
   return createServer(async (req, res) => {
     try {
@@ -57,7 +59,11 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!ruta.startsWith('/api/')) return res.writeHead(404).end();
 
       // Caja: todo lo demás exige el PIN de demo.
-      if (!iguales(req.headers['x-pin'], pin)) return json(res, 401, { error: 'PIN incorrecto' });
+      const ip = req.headers['cf-connecting-ip'] ?? req.socket.remoteAddress, ahora = Date.now();
+      let f = fallos.get(ip);
+      if (!f || f.hasta <= ahora) fallos.set(ip, (f = { n: 0, hasta: ahora + VENTANA_MS }));
+      if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.ceil((f.hasta - ahora) / 1000) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
+      if (!iguales(req.headers['x-pin'], pin)) { f.n++; return json(res, 401, { error: 'PIN incorrecto' }); }
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...metricas(db, comision), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
         const ids = db.prepare('SELECT id FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20').all();
