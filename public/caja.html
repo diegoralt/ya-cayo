@@ -155,7 +155,7 @@ async function api(ruta, init = {}) {
 }
 function muestra() { const ok = !!pin; $('login').hidden = ok; for (const id of ['app', 'lista', 'met']) $(id).hidden = !ok; if (!ok) $('detalle').hidden = true; }
 $('entrar').onclick = () => { $('loginerr').textContent = ''; pin = $('pin').value; try { sessionStorage.setItem('pin', pin); } catch {} muestra(); refrescar(); };
-$('pin').onkeydown = (e) => e.key === 'Enter' && $('entrar').click();
+$('pin').onkeydown = (e) => { if (e.key === 'Enter') $('entrar').click(); }; // sin «&&»: devolver false cancelaría la escritura
 
 function nombre(o) {
   if (o.estado === 'entregada') return o.duplicado ? 'Entregado + duplicado' : 'Entregado';
@@ -280,7 +280,7 @@ function pintaAg() {
   $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); pintaReco();
 }
 $('agbtn').onclick = () => { const p = proponer($('agtxt').value); if (p.noEntendido) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } cant = p.cant; pintaAg(); };
-$('agtxt').onkeydown = (e) => e.key === 'Enter' && $('agbtn').click();
+$('agtxt').onkeydown = (e) => { if (e.key === 'Enter') $('agbtn').click(); };
 $('demo').onchange = pintaAg; pintaAg();
 muestra(); pantalla(); pintaReco(); refrescar(); setInterval(refrescar, 2000); setInterval(pintaDetalle, 1000);
 </script>
