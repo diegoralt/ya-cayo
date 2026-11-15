@@ -12,6 +12,16 @@ const MAX_FALLOS = 10, VENTANA_MS = 60_000; // PIN: 10 fallos por minuto y por I
 // ponytail: solo estas dos páginas se sirven; nunca el directorio del repo ni la base.
 const pagina = (n) => readFileSync(new URL(`../public/${n}`, import.meta.url));
 
+// Cabeceras de defensa en todas las respuestas. CSP: sin recursos externos; los scripts y estilos inline de las páginas siguen permitidos.
+const SEGURIDAD = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'cache-control': 'no-store',
+  'content-security-policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+};
+const esLoopback = (a = '') => /^(::1|127\.|::ffff:127\.)/.test(a);
+
 const json = (res, codigo, obj) => res.writeHead(codigo, { 'content-type': 'application/json' }).end(JSON.stringify(obj));
 const iguales = (a = '', b = '') => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -38,7 +48,8 @@ const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacci
 export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03 }) {
   const fallos = new Map(); // ponytail: en memoria, una instancia; sin limpieza (pocas IPs). Con varios procesos, pasar a Redis.
   const porToken = (t) => db.prepare('SELECT id FROM ordenes WHERE token=?').get(t)?.id;
-  return createServer(async (req, res) => {
+  const srv = createServer(async (req, res) => {
+    for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v);
     try {
       const url = new URL(req.url, 'http://x');
       const ruta = url.pathname;
@@ -59,7 +70,8 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!ruta.startsWith('/api/')) return res.writeHead(404).end();
 
       // Caja: todo lo demás exige el PIN de demo.
-      const ip = req.headers['cf-connecting-ip'] ?? req.socket.remoteAddress, ahora = Date.now();
+      // cf-connecting-ip solo se confía si la conexión viene del túnel local; directo desde la red, no se puede falsificar.
+      const ip = (esLoopback(req.socket.remoteAddress) && req.headers['cf-connecting-ip']) || req.socket.remoteAddress, ahora = Date.now();
       let f = fallos.get(ip);
       if (!f || f.hasta <= ahora) fallos.set(ip, (f = { n: 0, hasta: ahora + VENTANA_MS }));
       if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.ceil((f.hasta - ahora) / 1000) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
@@ -96,6 +108,8 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       return json(res, e instanceof SyntaxError ? 400 : 502, { error: e instanceof SyntaxError ? 'JSON inválido' : 'error al hablar con pey' });
     }
   });
+  srv.headersTimeout = 10_000; srv.requestTimeout = 15_000; // ponytail: corta conexiones lentas (slowloris) si algo llega sin Cloudflare
+  return srv;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -107,6 +121,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const pey = crearClientePey();
   iniciarPolling({ db, pey });
   const port = Number(process.env.PORT ?? 8787);
+  const host = process.env.HOST ?? '127.0.0.1'; // solo el túnel local; nunca 0.0.0.0 salvo decisión explícita
   const comision = Number(process.env.COMISION_TARJETA ?? 0.03);
-  crearServidor({ db, pey, secret, pin, titular: process.env.TITULAR || undefined, comision }).listen(port, () => console.log(`ya-cayo escuchando en :${port}`));
+  crearServidor({ db, pey, secret, pin, titular: process.env.TITULAR || undefined, comision }).listen(port, host, () => console.log(`ya-cayo escuchando en ${host}:${port}`));
 }
