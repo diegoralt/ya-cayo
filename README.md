@@ -3,8 +3,9 @@
 Caja de mostrador que cobra con CoDi mediante la API de pey y solo da por pagado lo que el servidor confirma (webhook firmado + polling de respaldo). Una entrega por cobro; ninguna captura de pantalla cuenta como pago.
 
 - **Demo en vivo:** https://pey.drkingsia.com · **PIN de la caja: `147369`** (PIN de demo, solo para evaluar; se rota al terminar la evaluación).
-- **Descripción e instrucciones de prueba:** `docs/entrega/`.
-- **Ejecutar:** copia `.env.example` a `.env`, completa los valores y corre `npm install && npm start`. Pruebas: `node --test`.
+- **Prueba en 1 minuto:** abre la URL → escribe el PIN → en el asistente escribe «dos cafés y un pan» → **Proponer cobro** → **Cobrar con CoDi** (con «Cobro de prueba» marcado se cobra $0.01). Pasos completos y casos a revisar: [Cómo probar](#cómo-probar-para-el-jurado).
+- **Si la URL no responde:** la demo se aloja en el equipo del autor y puede estar en mantenimiento; vuelve a intentar en unos minutos, o corre tu propia instancia con [Ejecutar en local](#ejecutar-en-local).
+- **Descripción e instrucciones de prueba:** `docs/entrega/`. Pruebas automáticas: `node --test`.
 
 ## Cómo probar (para el jurado)
 **Demo pública:** https://pey.drkingsia.com · PIN de la caja: `147369`. Sin celular con CoDi puedes recorrer los pasos 1 a 3 y ver el video; el pago real cuesta $0.01 MXN.
@@ -22,6 +23,31 @@ Caja de mostrador que cobra con CoDi mediante la API de pey y solo da por pagado
 **Qué no se probó con pago real:** reenvío del evento, pago tardío, duplicado y consulta fallida; están cubiertos por `node --test` con un pey simulado. La confirmación se hace por webhook firmado y por polling de respaldo; Bot Fight Mode de Cloudflare puede desafiar el webhook, y el polling confirma igual.
 
 **Si algo falla:** recarga la caja; si el PIN se rechaza con «Demasiados intentos», espera un minuto. Para correrlo en local: `.env.example` → `.env`, `npm install && npm start`.
+
+## Ejecutar en local
+Requiere Node ≥ 24. `cp .env.example .env`, completa las variables y corre `npm install && npm start` (escucha en `http://localhost:8787`). Pruebas: `node --test` (usan un pey simulado, sin red ni credenciales).
+
+| Variable | Obligatoria | Qué es |
+|---|---|---|
+| `PEY_API_KEY` | sí | API key de **tu** cuenta de pey (portal → Desarrollador). Va como `Bearer` a `https://api.pey.mx`. |
+| `PEY_WEBHOOK_SECRET` | sí | Secreto de firma del webhook que muestra el portal al crear el webhook (rotable). |
+| `DEMO_PIN` | sí | PIN para entrar a la caja; elige el tuyo en tu instancia. |
+| `TITULAR` | no | Nombre del titular de la cuenta que cobra; se muestra al pagador. |
+| `PORT` | no | Puerto (default `8787`). |
+| `DB_PATH` | no | Archivo SQLite (default `./ya-cayo.sqlite`). |
+| `COMISION_TARJETA` | no | Supuesto de comisión de tarjeta para la recomendación de bono (default `0.03`). |
+
+Nunca subas `.env`: está ignorado por git. Cada comercio usa su propia cuenta y API key.
+
+### Configurar pey y CoDi
+1. **Cuenta y API key:** regístrate en pey.build/signup, entra a portal.mipey.mx → Perfil → Finanzas y da de alta una cuenta de cobro de tipo `codi`; luego Desarrollador → API key.
+2. **CLABE en CoDi:** el alta de una CLABE propia (`POST /bank-account`) pasa por Banxico y puede tardar **hasta 5 días hábiles**; `codiStatus` va de `PENDING` a `ACTIVE`. Empieza antes de necesitarla.
+3. **Webhook:** en Desarrollador registra `https://<tu-dominio>/webhook` (HTTPS público; en local usa un túnel). **Una API key admite un solo webhook.** La firma es Standard Webhooks (`webhook-id`, `webhook-timestamp`, `webhook-signature`) y el evento que usa la app es `codi.qr.payment_received`. Copia el secreto a `PEY_WEBHOOK_SECRET`.
+4. **Si usas Cloudflare** delante del dominio: Bot Fight Mode (plan gratuito) desafía el POST de pey con un 403 y no se puede excluir con reglas. Deja el registro DNS sin proxy o usa otro host. Mientras el webhook no llegue, el polling confirma igual.
+5. **Probar con dinero real:** paga **$0.01** desde la app de un banco con CoDi activo, distinto del banco que cobra. Las reglas de pey que la app respeta: QR de monto fijo con expiración mínima de 360 s, `amount: 0` solo en QR abiertos (nunca en precio cerrado), un cobro vivo por orden (no hay cancelación) y sin reembolso por API.
+6. **Qué no publicar:** CLABE ni `trackingKey` (vienen en el payload del webhook), API key, secreto del webhook.
+
+Detalle verificado de la API y de los términos de pey: `docs/contexto.md`.
 
 ## Versión 1 (este repositorio)
 Cobro con QR de monto fijo, confirmación por el servidor, entrega única, métricas medidas por el servidor y un asistente de captura **por reglas, sin IA** que propone concepto y total a partir de un texto como «dos cafés y un pan».
