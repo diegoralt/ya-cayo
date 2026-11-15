@@ -5,7 +5,7 @@
 ## Siguiente acción (15-nov; entrega 1:00 PM CDMX, formulario 12:00)
 1. **Webhook verificado** (200 en pey, fila en `eventos`, firma válida; detalle en `docs/contexto.md`). Bot Fight Mode quedó encendido otra vez: bloquea los envíos de pey. Antes del 2.º corte elegir: host fuera de ese bloqueo (H7), zona aparte o Super Bot Fight Mode con Skip.
 2. **Textos de entrega actualizados** (pago real por polling + webhook firmado verificado; reenvío/tardío/duplicado/consulta fallida solo con pey simulado). Revisar y quitar el aviso de borrador antes de enviar.
-3. **UI (commiteada, sin push):** ticket + sello + barra, límite de PIN, ajustes de la revisión ciega de Codex (6/6/5): texto del pagador, doble envío, consultas superpuestas, contraste/foco. Pendiente de esa revisión, sin decidir: reordenar la caja (recientes antes del formulario) y subir originalidad; foco al reconstruir la lista. Barrido de secretos antes del push.
+3. **UI (publicada en `main`):** ticket + sello + barra, límite de PIN, ajustes de la revisión ciega de Codex (6/6/5): texto del pagador, doble envío, consultas superpuestas, contraste/foco. Pendiente de esa revisión, sin decidir: reordenar la caja (recientes antes del formulario) y subir originalidad; foco al reconstruir la lista. Correr `sh scripts/barrido-secretos.sh` antes de cada push. `main` protegida (sin force-push ni borrado, historial lineal; Diego puede empujar directo); interacciones externas limitadas a colaboradores hasta 2027-05-15.
 4. **Video ≤ 3 min y formulario** pendientes. Probar con pago real: entregar, reenvío, tardío, duplicado.
 5. Skill `orca-cli`: Diego debe revisarla y aceptarla (`sh ~/.claude/hooks/session-start-skills.sh --aceptar`).
 
