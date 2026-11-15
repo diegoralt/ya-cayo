@@ -3,14 +3,13 @@
 > Se sobrescribe cada sesión. Última actualización: 2026-11-14 (cierre de sesión larga; seguir en sesión nueva tras `/clear`).
 
 ## Siguiente acción (en este orden; el plan manda: `docs/changes/2026-11-14-ya-cayo-primer-corte/plan.md`, primera casilla vacía)
-1. **Maqueta** `public/maqueta.html` rehecha (precio de lista, panel «Recomendación al vendedor», bloque «¿Aún no tienes CoDi?»; enlace oficial de CoDi pendiente de confirmar en la fuente). **Falta el visto bueno de Diego** antes del paso 2.
-2. **H4 real** (rutas `/api/ordenes` y `/api/metricas`, columna `pagada_en`, PIN de demo, tope $50, máx. 3 cobros vivos, `/pagar/:id`, mobile-first). Pruebas en local con `node --test` (19/19 hoy).
-3. **H0**: Diego corre `curl https://<subdominio>/health` con el túnel apuntando al puerto de la app.
-4. **H1 (bloqueado)**: no hay quien pague el QR de prueba; desbloquear con otra persona con CoDi que pague $0.01. H3 queda abierto hasta H1.
+1. **H4, resto:** `docs/changes/2026-11-14-ya-cayo-primer-corte/checklist-e2e.md` (resultado esperado por estado y métrica) y revisar a ojo `public/caja.html` y `public/pagar.html` en celular/tablet (solo se comprobó sintaxis y API; no se han visto en pantalla). Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
+2. **H0 real:** el curl de Diego devolvió «sonda viva» (la sonda desechable, no la app). Parar la sonda, arrancar `npm start` con `.env` (`PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DEMO_PIN`, `TITULAR`) en el puerto del túnel y repetir `curl https://pey.drkingsia.com/health`: debe decir `{"ok":true,"app":"ya-cayo"}`.
+3. **H1 (bloqueado):** nadie con CoDi para pagar $0.01. H3 y el e2e de H4 quedan abiertos hasta H1.
 Entrega: dom 15-nov 1:00 PM CDMX; congelar alcance 10:30; formulario 12:00.
 
 ## Estado del trabajo
-Commits hechos: docs, cambio abierto, núcleo (H2 y H3 en local). **Sin commit:** maqueta con incentivo (se va a rehacer), `src/pey.js` (ajuste al OpenAPI), `test/pey.test.js`, `plan.md` y este archivo. Preguntar a Diego antes de commitear.
+Maqueta confirmada por Diego (se mejora solo si hace falta). H4 implementado en local (rutas, PIN, tope, máx. 3 vivos, `pagada_en`, `/pagar/:token`, métricas; `node --test` 26/26), **sin commit**: preguntar a Diego antes de commitear.
 Hay una sonda desechable fuera del repo en el scratchpad de la sesión anterior (`receptor.py`, `crear-qr.sh`, `consultar-qr.sh`); el scratchpad cambia con la sesión, si hace falta se recrean.
 
 ## Decisiones tomadas hoy (no reabrir)
