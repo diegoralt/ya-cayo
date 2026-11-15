@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ya Cayó · maqueta</title>
+<style>
+  :root { color-scheme: light; --fg:#1b1f24; --mut:#5b6470; --bg:#f6f7f9; --card:#fff; --line:#d9dde3;
+    --ok:#0b6b3a; --okbg:#e4f5ea; --warn:#8a5a00; --warnbg:#fff3d6; --bad:#a1262b; --badbg:#fde8e8; --info:#164e8a; --infobg:#e6f0fb; --ac:#0b5cd5; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; color:var(--fg); background:var(--bg); }
+  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  h1 { font-size:1.1rem; margin:0; }
+  .rotulo { font-size:.8rem; background:var(--warnbg); color:var(--warn); padding:2px 8px; border-radius:999px; border:1px solid #e6c36b; }
+  nav { display:flex; gap:4px; padding:8px 16px 0; }
+  nav button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-bottom:none; background:#eceef2; border-radius:8px 8px 0 0; cursor:pointer; }
+  nav button[aria-selected=true] { background:var(--card); font-weight:600; }
+  main { padding:0 16px 32px; max-width:1100px; margin:0 auto; }
+  section[hidden] { display:none; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:0 8px 8px 8px; padding:16px; }
+  .sim { margin:12px 0; padding:10px 12px; background:var(--infobg); border:1px dashed var(--info); border-radius:8px; font-size:.9rem; }
+  .sim label { font-weight:600; margin-right:8px; }
+  .sim select { font:inherit; padding:4px 8px; }
+  .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { .grid { grid-template-columns: 280px 1fr 300px; } }
+  fieldset { border:1px solid var(--line); border-radius:8px; padding:12px; margin:0; }
+  legend { font-weight:600; padding:0 6px; }
+  .campo { display:block; margin-bottom:10px; }
+  .campo span { display:block; font-size:.85rem; color:var(--mut); margin-bottom:2px; }
+  input { font:inherit; width:100%; padding:8px; border:1px solid #9aa3af; border-radius:6px; }
+  button.primario { font:inherit; padding:10px 14px; border:0; border-radius:8px; background:var(--ac); color:#fff; cursor:pointer; width:100%; }
+  button.sec { font:inherit; padding:8px 12px; border:1px solid #9aa3af; border-radius:8px; background:#fff; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible, nav button:focus-visible { outline:3px solid #f5a623; outline-offset:2px; }
+  .estado { display:flex; gap:10px; align-items:center; padding:10px 12px; border-radius:8px; font-weight:600; border:1px solid; }
+  .estado small { display:block; font-weight:400; }
+  .e-info { background:var(--infobg); color:var(--info); border-color:#9dc1ea; }
+  .e-ok { background:var(--okbg); color:var(--ok); border-color:#86c9a0; }
+  .e-warn { background:var(--warnbg); color:var(--warn); border-color:#e6c36b; }
+  .e-bad { background:var(--badbg); color:var(--bad); border-color:#e49a9d; }
+  .qrbox { display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 0; }
+  .qr { width:200px; height:200px; border:1px solid var(--line); }
+  .qr.apagado { opacity:.25; filter:grayscale(1); }
+  .cuenta { font-variant-numeric:tabular-nums; font-size:1.4rem; font-weight:600; }
+  .acciones { display:flex; gap:8px; flex-wrap:wrap; }
+  .acciones .primario { width:auto; flex:1 1 180px; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .mut { color:var(--mut); font-size:.85rem; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .card b { display:block; font-size:1.5rem; font-variant-numeric:tabular-nums; }
+  .antes { background:#fafafa; border-style:dashed; }
+  .recibo { border:2px solid var(--ok); border-radius:8px; padding:12px; margin-top:12px; background:var(--okbg); }
+  h2 { font-size:1rem; margin:0 0 8px; }
+  .nota { font-size:.85rem; color:var(--mut); margin-top:8px; }
+  .reco { border:1px solid #e6c36b; background:var(--warnbg); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+  .reco div { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:.9rem; }
+  .reco small { display:block; color:var(--mut); }
+  .reco .total { border-top:1px solid #e6c36b; margin-top:4px; padding-top:6px; font-weight:700; }
+  .guia { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-top:12px; background:#fafbfc; }
+  .guia ol { margin:6px 0 0; padding-left:20px; }
+  .guia .img { display:inline-block; width:64px; height:48px; border:1px dashed #9aa3af; border-radius:6px; text-align:center; font-size:.65rem; line-height:1.1; color:var(--mut); padding-top:8px; vertical-align:middle; margin-right:6px; }
+  .incentivo { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:10px; background:#fafbfc; }
+  .incentivo div { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:.9rem; }
+  .incentivo small { display:block; color:var(--mut); }
+  .incentivo .total { border-top:1px solid var(--line); margin-top:4px; padding-top:6px; font-weight:700; color:var(--ok); font-size:1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ya Cayó · cobra con certeza</h1>
+  <span><span class="rotulo">MAQUETA · datos de ejemplo, nada es real</span> <span class="rotulo">Caja 1 · perfil ficticio</span></span>
+</header>
+
+<nav role="tablist" aria-label="Vistas">
+  <button role="tab" id="t-caja" aria-selected="true" aria-controls="v-caja">Caja</button>
+  <button role="tab" id="t-pagador" aria-selected="false" aria-controls="v-pagador">Pagador</button>
+  <button role="tab" id="t-metricas" aria-selected="false" aria-controls="v-metricas">Métricas</button>
+</nav>
+
+<main>
+  <div class="sim">
+    <label for="sel">Ver estado (solo maqueta):</label>
+    <select id="sel">
+      <option value="esperando">Esperando confirmación</option>
+      <option value="pagada">Pagado (confirmado por el servidor)</option>
+      <option value="entregada">Entregado</option>
+      <option value="vencida">QR vencido</option>
+      <option value="tardia">Pago tardío</option>
+      <option value="duplicada">Posible duplicado</option>
+      <option value="fallida">Consulta fallida</option>
+    </select>
+  </div>
+
+  <!-- CAJA -->
+  <section id="v-caja" role="tabpanel" aria-labelledby="t-caja" class="panel">
+    <div class="grid">
+      <fieldset>
+        <legend>Nuevo cobro</legend>
+        <label class="campo"><span>Concepto del ticket</span><input value="Ticket 0042 · 2 cafés" autocomplete="off"></label>
+        <label class="campo"><span>Precio de lista (MXN, máx. $50 en la demo)</span><input value="1.00" inputmode="decimal" autocomplete="off"></label>
+        <div class="reco" aria-live="polite">
+          <h2 style="margin:0">Recomendación al vendedor <span class="rotulo">supuesto, no verificado</span></h2>
+          <div><span>Comisión de tarjeta evitada <small>(supuesto 3.0%, configurable)</small></span><span>≈ $0.03</span></div>
+          <div class="total"><span>Bono sugerido por usar CoDi</span><span>hasta $0.03</span></div>
+          <small class="mut">Tú decides si lo das y cómo; el sistema no cambia el precio ni lo descuenta. Verifica con tu adquirente que esté permitido.</small>
+        </div>
+        <button class="primario" type="button">Cobrar con CoDi · $1.00</button>
+        <button class="sec" type="button" style="width:100%;margin-top:8px">Paga con tarjeta o efectivo · $1.00</button>
+        <p class="nota">Esta segunda opción solo se registra (no cobra): sirve para medir cuántos clientes aceptan CoDi. Máximo 3 cobros vivos a la vez; la caja pide el PIN de demo.</p>
+      </fieldset>
+
+      <div>
+        <div id="estado" class="estado" role="status" aria-live="polite"></div>
+        <div class="qrbox">
+          <svg id="qr" class="qr" viewBox="0 0 21 21" role="img" aria-label="QR de ejemplo (no es un QR real)"></svg>
+          <div class="cuenta" id="cuenta">05:42</div>
+          <div class="mut" id="detalle"></div>
+        </div>
+        <div class="acciones">
+          <button class="primario" id="entregar" type="button">Entregar</button>
+          <button class="sec" type="button">Reconciliar ahora</button>
+          <button class="sec" type="button" id="voz" aria-pressed="true">🔊 Voz activada</button>
+        </div>
+        <p class="nota" id="nota"></p>
+      </div>
+
+      <div>
+        <h2>Cobros del día</h2>
+        <table>
+          <thead><tr><th>#</th><th>Concepto</th><th>Monto</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td>42</td><td>2 cafés</td><td>$1.00</td><td id="fila42">Esperando</td></tr>
+            <tr><td>41</td><td>Pan dulce</td><td>$1.00</td><td>Entregado · CoDi</td></tr>
+            <tr><td>40</td><td>Jugo</td><td>$1.00</td><td>Tarjeta o efectivo (registrado)</td></tr>
+          </tbody>
+        </table>
+        <p class="nota">Devolución = registro manual: pey no ofrece reembolso por API.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGADOR -->
+  <section id="v-pagador" role="tabpanel" aria-labelledby="t-pagador" class="panel" hidden>
+    <h2>Vas a pagar</h2>
+    <table>
+      <tr><th scope="row">Quién cobra</th><td>[Titular real de la cuenta · se declara aquí]</td></tr>
+      <tr><th scope="row">Concepto</th><td>Ticket 0042 · 2 cafés</td></tr>
+      
+      <tr><th scope="row">Total a pagar (precio de lista)</th><td><b>$1.00 MXN</b></td></tr>
+    </table>
+    <div class="qrbox">
+      <svg id="qr2" class="qr" viewBox="0 0 21 21" role="img" aria-label="QR de ejemplo (no es un QR real)"></svg>
+      <div class="cuenta" id="cuenta2">05:42</div>
+      <p class="mut" style="text-align:center;max-width:36ch">Abre la app de tu banco, elige pagar con CoDi y escanea el QR. Después vuelve aquí: la confirmación llega sola.</p>
+    </div>
+    <details class="guia">
+      <summary><b>¿Aún no tienes CoDi?</b></summary>
+      <ol>
+        <li><span class="img" aria-hidden="true">ilustración genérica</span>Abre la app de tu banco y busca la opción CoDi (o «Cobro Digital»).</li>
+        <li><span class="img" aria-hidden="true">ilustración genérica</span>Actívala con tu número de celular, siguiendo las instrucciones de tu banco.</li>
+        <li><span class="img" aria-hidden="true">ilustración genérica</span>Vuelve aquí, escanea el QR y paga.</li>
+      </ol>
+      <p class="nota">Ilustraciones genéricas, sin marcas de bancos. Los pasos exactos cambian por banco: NO VERIFICADO por banco. Guía oficial: [enlace oficial de CoDi · pendiente de confirmar en la fuente]</p>
+    </details>
+    <div id="estado2" class="estado" role="status" aria-live="polite"></div>
+    <div id="recibo" class="recibo" hidden>
+      <h2>Recibo</h2>
+      <div>$1.00 MXN · Ticket 0042 · pagado a [titular real]</div>
+      <div class="mut">Confirmado por el servidor · folio de ejemplo IDC-0000</div>
+    </div>
+  </section>
+
+  <!-- MÉTRICAS -->
+  <section id="v-metricas" role="tabpanel" aria-labelledby="t-metricas" class="panel" hidden>
+    <h2>Después · con Ya Cayó <span class="rotulo">valores de ejemplo</span></h2>
+    <div class="cards">
+      <div class="card"><span class="mut">Tiempo de cobro</span><b>0:23</b><span class="mut">crear QR → confirmación del servidor</span></div>
+      <div class="card"><span class="mut">Latencia de confirmación</span><b>2.1 s</b><span class="mut">pago real → servidor lo confirma</span></div>
+      <div class="card"><span class="mut">Clics por cobro</span><b>3</b><span class="mut">crear, ver confirmación, entregar</span></div>
+      <div class="card"><span class="mut">Cambios de app</span><b>0</b><span class="mut">la caja no sale de esta pantalla</span></div>
+      <div class="card"><span class="mut">Entregas por orden</span><b>1</b><span class="mut">se mantiene en 1 al reprocesar</span></div>
+      <div class="card"><span class="mut">Aceptación de CoDi</span><b>2 de 3</b><span class="mut">tickets que eligieron CoDi cuando se les ofreció</span></div>
+      <div class="card"><span class="mut">Comisión de tarjeta evitada (estimada)</span><b>$0.06</b><span class="mut">supuesto: 3.0% configurable por comercio; no medida</span></div>
+    </div>
+    <h2 style="margin-top:16px">Antes · captura de pantalla y revisar la app del banco <span class="rotulo">medición simulada, n=3</span></h2>
+    <div class="cards">
+      <div class="card antes"><span class="mut">Tiempo de cobro</span><b>1:40</b><span class="mut">promedio de 3 cronometrajes (ejemplo)</span></div>
+      <div class="card antes"><span class="mut">Clics</span><b>9</b><span class="mut">ejemplo</span></div>
+      <div class="card antes"><span class="mut">Cambios de app</span><b>4</b><span class="mut">ejemplo</span></div>
+      <div class="card antes"><span class="mut">Prueba de pago</span><b>Captura</b><span class="mut">no verificable por el servidor</span></div>
+    </div>
+    <p class="nota">Los números del «antes» son simulados y se reemplazan por los 3 cronometrajes de Diego; se rotulan así en la demo. Lo medido en «después» sale del servidor y del cliente.</p>
+  </section>
+</main>
+
+<script>
+const ESTADOS = {
+  esperando: { cls:'e-info', icono:'⏳', t:'Esperando confirmación del servidor', s:'Una captura de pantalla no cuenta como pago.', entregar:false, qr:true, fila:'Esperando', nota:'El botón Entregar se activa solo cuando el servidor confirma el pago.' },
+  pagada:    { cls:'e-ok', icono:'✔', t:'Ya cayó el pago · confirmado por el servidor', s:'Puedes entregar.', entregar:true, qr:false, fila:'Pagado', nota:'La alerta de voz dice: «Ya cayó el pago de un peso».', recibo:true },
+  entregada: { cls:'e-ok', icono:'📦', t:'Entregado · 1 entrega registrada', s:'Reprocesar el evento no genera otra entrega.', entregar:false, qr:false, fila:'Entregado', nota:'Contador de entregas: 1.', recibo:true },
+  vencida:   { cls:'e-bad', icono:'⌛', t:'QR vencido', s:'Crea un cobro nuevo. Si alguien pagó justo antes, se sigue consultando 30 min.', entregar:false, qr:false, fila:'Vencido', nota:'Caso preparado para el video, rotulado como QR vencido de ejemplo.', apagado:true },
+  tardia:    { cls:'e-warn', icono:'⚠', t:'Pago tardío · sin entrega automática', s:'Llegó después del vencimiento. Decide a mano y registra la devolución si aplica.', entregar:false, qr:false, fila:'Pago tardío', nota:'Un webhook tardío no prueba que el pago sea tardío: se compara datePaid contra el vencimiento.', apagado:true },
+  duplicada: { cls:'e-warn', icono:'⚠', t:'Posible duplicado · una sola entrega', s:'Hubo un segundo pago del mismo ticket. Queda como excepción.', entregar:false, qr:false, fila:'Entregado + duplicado', nota:'Devolución del segundo pago: registro manual.', recibo:true },
+  fallida:   { cls:'e-warn', icono:'📡', t:'No pude consultar a pey · reintentando', s:'Mientras no haya confirmación, no se habilita nada.', entregar:false, qr:true, fila:'Esperando', nota:'El servidor reintenta cada 5 s; también puedes pulsar Reconciliar ahora.' }
+};
+// QR decorativo: cuadrícula pseudoaleatoria fija con tres marcadores. No es un QR real.
+function dibujaQr(el) {
+  let s = 7, r = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff, h = '<rect width="21" height="21" fill="#fff"/>';
+  const marca = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="#000"/><rect x="${x+1}" y="${y+1}" width="5" height="5" fill="#fff"/><rect x="${x+2}" y="${y+2}" width="3" height="3" fill="#000"/>`;
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
+    const enMarca = (x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12);
+    if (!enMarca && r() > 0.52) h += `<rect x="${x}" y="${y}" width="1" height="1" fill="#000"/>`;
+  }
+  el.innerHTML = h + marca(0,0) + marca(14,0) + marca(0,14);
+}
+const $ = (id) => document.getElementById(id);
+function pinta(k) {
+  const e = ESTADOS[k];
+  for (const id of ['estado', 'estado2']) { $(id).className = 'estado ' + e.cls; $(id).innerHTML = `<span aria-hidden="true">${e.icono}</span><span>${e.t}<small>${e.s}</small></span>`; }
+  $('entregar').disabled = !e.entregar;
+  $('entregar').textContent = k === 'entregada' || k === 'duplicada' ? 'Ya entregado' : 'Entregar';
+  for (const id of ['qr', 'qr2']) $(id).classList.toggle('apagado', !!e.apagado || (!e.qr && k !== 'esperando'));
+  $('nota').textContent = e.nota;
+  $('fila42').textContent = e.fila;
+  $('recibo').hidden = !e.recibo;
+  const cuenta = k === 'esperando' || k === 'fallida' ? '05:42' : k === 'vencida' || k === 'tardia' ? '00:00' : '—';
+  $('cuenta').textContent = $('cuenta2').textContent = cuenta;
+  $('detalle').textContent = k === 'duplicada' ? 'Transacciones: 2 (1 válida, 1 duplicada) · entregas: 1' : k === 'tardia' ? 'Transacciones: 1 (tardía)' : k === 'esperando' || k === 'fallida' ? 'Transacciones: 0' : 'Transacciones: 1 (válida)';
+}
+$('sel').addEventListener('change', (ev) => pinta(ev.target.value));
+$('voz').addEventListener('click', (ev) => { const on = ev.target.getAttribute('aria-pressed') !== 'true'; ev.target.setAttribute('aria-pressed', on); ev.target.textContent = on ? '🔊 Voz activada' : '🔇 Voz silenciada'; });
+for (const t of document.querySelectorAll('[role=tab]')) t.addEventListener('click', () => {
+  for (const b of document.querySelectorAll('[role=tab]')) { b.setAttribute('aria-selected', b === t); $(b.getAttribute('aria-controls')).hidden = b !== t; }
+});
+dibujaQr($('qr')); dibujaQr($('qr2')); pinta('esperando');
+</script>
+</body>
+</html>
