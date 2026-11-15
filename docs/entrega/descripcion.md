@@ -1,29 +1,30 @@
-# Descripción del proyecto (≤ 500 palabras) · BORRADOR
+# Descripción del proyecto (≤ 500 palabras)
 
-> Antes de enviar: quitar este aviso y resolver cada `[PENDIENTE]`. No afirmar nada de lo que H1 no haya verificado.
-
-**Ya Cayó** es una caja de mostrador que cobra con CoDi a través de la API de pey y solo da por pagado lo que el servidor confirma. Hoy «ya pagué» se prueba con una captura de pantalla, que no es un pago, y el cajero cambia de app para revisar el banco.
+**Ya Cayó** es una caja de mostrador que cobra con CoDi mediante la API de pey y solo da por pagado lo que el servidor confirma. Hoy «ya pagué» se prueba con una captura de pantalla, que no es un pago.
 
 **Cómo usa pey**
-1. Al crear un ticket, el servidor llama a `POST /codi/qr` con monto fijo, concepto y vigencia de 6 minutos. El monto lo fija el servidor, no el cliente.
-2. El pagador abre `/pagar/<token>`, ve quién cobra, el concepto y el monto, y escanea el QR con su banco.
-3. El servidor reacciona al resultado de dos maneras: el webhook `codi.qr.payment_received` (firma Standard Webhooks verificada con el SDK oficial) y un polling de respaldo a `GET /transaction/codi/qr/{id}` cada 5 s mientras el cobro vive. El webhook solo dispara una consulta; nunca marca pagado por sí mismo.
-4. Cuenta como pago solo una transacción `PAID` con monto y moneda correctos y `datePaid` anterior al vencimiento; un pago posterior queda «tardío» y un segundo pago, «duplicado», sin nueva entrega.
-5. La caja habilita **una sola entrega** por orden. Estado y registro de entrega van en una misma transacción SQLite; reenviar el evento deja el contador en uno.
+1. Al crear un ticket, el servidor llama a `POST /codi/qr` con monto fijo, concepto y vigencia de 6 minutos; el monto lo fija el servidor.
+2. El pagador escanea el QR; `/pagar/<token>` le muestra quién cobra, el concepto y el monto.
+3. El servidor reacciona con el webhook `codi.qr.payment_received` (firma Standard Webhooks verificada) y un polling de respaldo a `GET /transaction/codi/qr/{id}`. El webhook solo dispara una consulta; nunca marca pagado.
+4. Cuenta como pago solo una transacción `PAID` con monto correcto y anterior al vencimiento. Un pago posterior queda «tardío» y un segundo pago, «duplicado», sin nueva entrega.
+5. La caja habilita **una sola entrega** por orden, en una misma transacción SQLite; reenviar el evento deja el contador en uno.
 
 **Qué hace distinto**
-- Ninguna captura cuenta como pago; «pagado» solo sale del servidor, con alerta de voz.
-- Métrica antes/después medida por el servidor: tiempo de cobro, latencia de confirmación, entregas por orden, aceptación de CoDi.
-- Recomendación al vendedor: estima la comisión de tarjeta evitada y sugiere un bono por usar CoDi (supuesto configurable y rotulado; el vendedor decide, el precio no cambia).
-- Guía «¿Aún no tienes CoDi?» para el pagador, con ilustraciones genéricas.
-- Asistente de captura **por reglas, sin IA**: de un texto como «dos cafés y un pan» propone concepto y monto. El cajero confirma y el servidor fija el monto del QR; el asistente no puede marcar pagado ni entregar. El video usa un total de lista ilustrativo y cobra $0.01 reales; la caja lo indica en pantalla.
+- «Pagado» sale solo del servidor, con sello y alerta de voz.
+- Métricas del servidor: tiempo de cobro, latencia de confirmación, entregas por orden, aceptación de CoDi.
+- Estima la comisión de tarjeta evitada (supuesto configurable; el vendedor decide).
+- Asistente de captura **por reglas, sin IA**: de «dos cafés y un pan» propone concepto y total. El cajero confirma y el servidor fija el cobro; no puede marcar pagado ni entregar.
+- Guía «¿Aún no tienes CoDi?» para el pagador.
 
-**Qué es real y qué es simulado**
-- Los cobros son de $0.01 MXN. Se verificaron pagos reales de $0.01 el 15-nov-2026: el servidor los confirmó por polling en 1 a 3 s y el webhook `codi.qr.payment_received` llegó con firma Standard Webhooks válida (pey registró 200 y el servidor guardó el evento). Los casos de reenvío, pago tardío, duplicado y consulta fallida solo se probaron con 26 pruebas automáticas y un pey simulado. Limitación conocida: Bot Fight Mode de Cloudflare (plan gratuito) desafía los envíos del webhook de pey; para la demo se apagó en la zona y para el 2.º corte se moverá a un host sin ese bloqueo.
-- Los perfiles de caja son ficticios y el QR vencido del video está preparado; ambos se rotulan.
-- Las mediciones «antes» son 3 cronometrajes manuales.
+**Versión 2 (planeada, no implementada)**
+Un agente con IA recibirá los productos y piezas a cobrar, calculará el total y generará el cobro de pago para CoDi con la API de pey. Misma regla: el agente propone, el cajero confirma y el servidor decide; sin herramientas para marcar pagado ni entregar, y el texto de los productos se trata como dato, nunca como instrucción.
 
-**Alcance y límites**
-En el hackatón es una instancia con un único titular: los cobros caen a la CLABE de prueba que dieron los organizadores (el nombre del titular se muestra en la demo); al dar de alta mi cuenta CoDi propia, caerán a ella. Cada comercio despliega la suya con cuenta y API key propias; no es una plataforma multi-comercio ni cobra a nombre de terceros. Sin reembolso por API: una devolución es un registro manual. La demo tiene PIN, tope de $50 y máximo 3 cobros vivos.
+**Real y simulado**
+- El 15-nov-2026 se verificaron pagos reales de $0.01: el servidor los confirmó por polling en 1 a 3 s y el webhook llegó con firma válida. Reenvío, pago tardío, duplicado y consulta fallida solo se probaron con 27 pruebas automáticas y un pey simulado.
+- En el video el total de lista ($75) es ilustrativo y el cobro real es de $0.01; la pantalla lo indica. El perfil de caja es de ejemplo. Las mediciones «antes» son 3 cronometrajes manuales.
+- Limitación: Bot Fight Mode de Cloudflare (plan gratuito) puede desafiar el webhook; el polling confirma igual.
 
-**Tecnología**: Node 24 (`node:http`, `node:sqlite`), HTML y JS sin framework, SDK `standardwebhooks`, túnel de Cloudflare. Desarrollado con Claude Code y Codex.
+**Alcance**
+Una instancia con un único titular (CLABE de prueba de los organizadores; el titular se muestra en la demo). Cada comercio despliega la suya con cuenta y API key propias; no es multi-comercio ni cobra a nombre de terceros. Sin reembolso por API (devolución = registro manual). La demo tiene PIN, tope de $50 y máximo 3 cobros vivos.
+
+**Tecnología:** Node 24 (`node:http`, `node:sqlite`), HTML y JS sin framework, SDK `standardwebhooks`, túnel de Cloudflare. Hecho con Claude Code y Codex.
