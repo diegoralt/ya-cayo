@@ -5,7 +5,7 @@
 ## Siguiente acción (15-nov; entrega 1:00 PM CDMX, formulario 12:00)
 1. **Webhook verificado** (200 en pey, fila en `eventos`, firma válida; detalle en `docs/contexto.md`). Bot Fight Mode quedó encendido otra vez: bloquea los envíos de pey. Antes del 2.º corte elegir: host fuera de ese bloqueo (H7), zona aparte o Super Bot Fight Mode con Skip.
 2. **Textos de entrega actualizados** (pago real por polling + webhook firmado verificado; reenvío/tardío/duplicado/consulta fallida solo con pey simulado). Revisar y quitar el aviso de borrador antes de enviar.
-3. **UI de `caja.html`/`pagar.html`:** rediseño (ticket térmico, sello «Ya cayó», barra de vigencia) en el árbol SIN commit. Falta revisar en captura los estados vencido/tardío/duplicado y la caja en celular. Esperando OK de Diego para commit (`feat(ui): ...`); barrido de secretos antes del push. Después: revisión a ciegas de Codex (diff + capturas) y revisar límite de intentos del PIN y tokens de `/pagar` no adivinables.
+3. **UI (commiteada, sin push):** rediseño ticket + sello + barra; límite de PIN (10 fallos/min por IP → 429) con prueba; tokens de `/pagar` = `randomUUID`. Revisión a ciegas de Codex en curso: salida en el scratchpad de la sesión (`rev/codex-ui.md`); aplicar sus 5 ajustes de mayor impacto que no choquen con decisiones tomadas y volver a verificar. Barrido de secretos antes del push.
 4. **Video ≤ 3 min y formulario** pendientes. Probar con pago real: entregar, reenvío, tardío, duplicado.
 5. Skill `orca-cli`: Diego debe revisarla y aceptarla (`sh ~/.claude/hooks/session-start-skills.sh --aceptar`).
 
