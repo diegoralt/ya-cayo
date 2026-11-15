@@ -6,6 +6,23 @@ Caja de mostrador que cobra con CoDi mediante la API de pey y solo da por pagado
 - **Descripción e instrucciones de prueba:** `docs/entrega/`.
 - **Ejecutar:** copia `.env.example` a `.env`, completa los valores y corre `npm install && npm start`. Pruebas: `node --test`.
 
+## Cómo probar (para el jurado)
+**Demo pública:** https://pey.drkingsia.com · el PIN de la caja viene en el formulario de entrega. Sin celular con CoDi puedes recorrer los pasos 1 a 3 y ver el video; el pago real cuesta $0.01 MXN.
+
+1. Abre la URL en un celular o tablet y escribe el PIN: verás la **caja**.
+2. En el asistente escribe «dos cafés y un pan» y pulsa **Proponer cobro** (por reglas, sin IA). Con «Cobro de prueba» marcado, el total de lista es ilustrativo y se cobra $0.01. Pulsa **Cobrar con CoDi**.
+3. Aparece el QR con cuenta regresiva de 6 minutos y el estado «Esperando confirmación». **Entregar** sigue desactivado: una captura de pantalla no cuenta como pago.
+4. Abre el **enlace del pagador** (bajo el QR) o escanea el QR con la app de tu banco con CoDi activo y paga $0.01.
+5. En unos segundos la caja muestra el sello **«Ya cayó»**, suena una alerta de voz y se habilita **Entregar**. La página del pagador dice «Pagaste».
+6. Pulsa **Entregar**: el contador queda en 1 y no se puede repetir.
+7. En **Métricas** ves tiempo de cobro, latencia de confirmación y entregas por orden (máx. 1).
+
+**Casos que puedes revisar:** un QR sin pagar pasa a «Vencido» a los 6 minutos, sin entrega; «Paga con tarjeta o efectivo» solo registra la elección y no cobra; un monto mayor a $50 o un 4.º cobro vivo se rechazan con mensaje.
+
+**Qué no se probó con pago real:** reenvío del evento, pago tardío, duplicado y consulta fallida; están cubiertos por `node --test` con un pey simulado. La confirmación se hace por webhook firmado y por polling de respaldo; Bot Fight Mode de Cloudflare puede desafiar el webhook, y el polling confirma igual.
+
+**Si algo falla:** recarga la caja; si el PIN se rechaza con «Demasiados intentos», espera un minuto. Para correrlo en local: `.env.example` → `.env`, `npm install && npm start`.
+
 ## Versión 1 (este repositorio)
 Cobro con QR de monto fijo, confirmación por el servidor, entrega única, métricas medidas por el servidor y un asistente de captura **por reglas, sin IA** que propone concepto y total a partir de un texto como «dos cafés y un pan».
 
