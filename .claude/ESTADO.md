@@ -3,13 +3,13 @@
 > Se sobrescribe cada sesión. Última actualización: 2026-11-14 (cierre de sesión larga; seguir en sesión nueva tras `/clear`).
 
 ## Siguiente acción (en este orden; el plan manda: `docs/changes/2026-11-14-ya-cayo-primer-corte/plan.md`, primera casilla vacía)
-1. **H4, resto:** `docs/changes/2026-11-14-ya-cayo-primer-corte/checklist-e2e.md` (resultado esperado por estado y métrica) y revisar a ojo `public/caja.html` y `public/pagar.html` en celular/tablet (solo se comprobó sintaxis y API; no se han visto en pantalla). Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
-2. **H0 real:** el curl de Diego devolvió «sonda viva» (la sonda desechable, no la app). Parar la sonda, arrancar `npm start` con `.env` (`PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DEMO_PIN`, `TITULAR`) en el puerto del túnel y repetir `curl https://pey.drkingsia.com/health`: debe decir `{"ok":true,"app":"ya-cayo"}`.
+1. **H4, resto:** `checklist-e2e.md` ya escrito (ejecutarlo con el pago real, tras H0/H1); falta revisar a ojo `public/caja.html` y `public/pagar.html` en celular/tablet (solo se comprobó sintaxis y API; no se han visto en pantalla). Formato real de `qrImage` de pey NO VERIFICADO (se asume PNG base64).
+2. **H0 hecho:** Diego verificó `curl https://pey.drkingsia.com/health` → `{"ok":true,"app":"ya-cayo"}` (el 14-nov).
 3. **H1 (bloqueado):** nadie con CoDi para pagar $0.01. H3 y el e2e de H4 quedan abiertos hasta H1.
 Entrega: dom 15-nov 1:00 PM CDMX; congelar alcance 10:30; formulario 12:00.
 
 ## Estado del trabajo
-Maqueta confirmada por Diego (se mejora solo si hace falta). H4 implementado en local (rutas, PIN, tope, máx. 3 vivos, `pagada_en`, `/pagar/:token`, métricas; `node --test` 26/26), **sin commit**: preguntar a Diego antes de commitear.
+Maqueta confirmada por Diego (se mejora solo si hace falta). H4 implementado en local (rutas, PIN, tope, máx. 3 vivos, `pagada_en`, `/pagar/:token`, métricas; `node --test` 26/26), commiteado. Preguntar a Diego antes de cada commit.
 Hay una sonda desechable fuera del repo en el scratchpad de la sesión anterior (`receptor.py`, `crear-qr.sh`, `consultar-qr.sh`); el scratchpad cambia con la sesión, si hace falta se recrean.
 
 ## Decisiones tomadas hoy (no reabrir)
