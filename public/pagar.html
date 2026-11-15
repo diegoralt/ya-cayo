@@ -14,7 +14,7 @@
   button { font:inherit; font-weight:600; min-height:44px; padding:8px 14px; border-radius:10px; border:1.5px solid var(--tinta); background:#fff; color:var(--tinta); cursor:pointer; transition:transform .08s, background .15s; }
   button:active:not(:disabled) { transform:translateY(1px) scale(.99); }
   button:disabled { opacity:.45; cursor:not-allowed; }
-  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #f5a623; outline-offset:2px; }
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #0b5cd5; outline-offset:2px; }
   .estado { padding:10px 12px; border-radius:10px; font-weight:700; border:1.5px solid; font-size:1.05rem; }
   .estado small { display:block; font-weight:400; font-size:.9rem; }
   .e-info { background:var(--infobg); color:var(--info); border-color:#b8b3ee; }
@@ -28,7 +28,7 @@
   .ticket::after { content:""; position:absolute; left:0; right:0; top:100%; height:10px; background:linear-gradient(135deg,var(--papel) 50%,transparent 50%) 0 0/14px 10px repeat-x, linear-gradient(225deg,var(--papel) 50%,transparent 50%) 0 0/14px 10px repeat-x; }
   .sello { width:max-content; max-width:100%; margin:18px auto 14px; transform:rotate(-6deg); border:3px solid var(--ok); color:var(--ok); background:rgba(255,255,255,.9); padding:2px 12px; font:900 2rem/1.2 var(--red); text-transform:uppercase; letter-spacing:.03em; border-radius:8px; animation:sella .38s cubic-bezier(.2,1.5,.4,1) both; }
   .sello.dup { border-color:var(--warn); color:var(--warn); font-size:1.1rem; }
-  @keyframes sella { from { transform:rotate(-6deg) scale(2.4); opacity:0; } to { transform:rotate(-6deg) scale(1); opacity:1; } }
+  @keyframes sella { from { transform:rotate(-6deg) scale(1.5); opacity:0; } to { transform:rotate(-6deg) scale(1); opacity:1; } }
   @media (prefers-reduced-motion:reduce) { .sello { animation:none; } .barra i { transition:none; } button { transition:none; } }
 
   main { max-width:460px; margin:0 auto; padding:0 16px 24px; }
@@ -39,6 +39,7 @@
   h1 { font:700 .95rem system-ui; color:var(--mut); margin:0; }
   .monto { font:800 2.8rem/1.1 var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.04em; margin:2px 0; }
   .estado { margin-bottom:12px; font-size:1.2rem; } .estado button { margin-top:10px; }
+  #concepto, #titular { overflow-wrap:anywhere; }
   .ico { vertical-align:middle; margin-right:6px; }
   ol { padding-left:20px; margin:6px 0 0; } li { margin-bottom:6px; }
   summary { cursor:pointer; min-height:44px; display:flex; align-items:center; list-style:none; } summary::-webkit-details-marker { display:none; } summary::before { content:"▸"; margin-right:8px; } details[open] > summary::before { content:"▾"; } details .mut, details ol { text-align:left; }
@@ -50,14 +51,14 @@
   <div id="estado" class="estado e-info" role="status" aria-live="polite">Cargando…</div>
   <div class="card ticket" id="tarjeta" hidden>
     <div id="sello" class="sello" hidden>Ya cayó</div>
-    <h1>Vas a pagar</h1>
+    <h1 id="titulo">Vas a pagar</h1>
     <div class="monto" id="monto">—</div>
     <div class="mut">a <b id="titular">…</b> · <span id="concepto"></span></div>
     <img id="qr" class="qr" alt="QR de cobro CoDi" hidden>
     <pre id="qrtexto" class="mut" style="white-space:pre-wrap;word-break:break-all" hidden></pre>
     <div class="cuenta" id="cuenta" role="timer" aria-label="Tiempo restante del QR"></div>
     <div class="barra" id="pista" aria-hidden="true"><i id="barra"></i></div>
-    <p class="mut" id="ayuda">Abre la app de tu banco, elige pagar con CoDi y escanea el QR. Vuelve aquí: la confirmación llega sola.</p>
+    <p class="mut" id="ayuda">Escanea este QR con la app de tu banco (CoDi). Si lo ves en el mismo celular con el que vas a pagar, pide el QR en la pantalla de caja o ábrelo en otro dispositivo. Vuelve aquí: la confirmación llega sola.</p>
   </div>
   <details class="card" style="margin-top:12px">
     <summary><b>¿Aún no tienes CoDi?</b></summary>
@@ -103,15 +104,18 @@ function pinta() {
   $('qr').hidden = !img; if (img && $('qr').dataset.s !== img) { $('qr').dataset.s = img; $('qr').src = img; }
   $('qrtexto').hidden = !esp || !!v.qrImage || !v.qrString; $('qrtexto').textContent = v.qrString ?? '';
   const resto = Math.max(0, v.expiraEn - Math.floor(Date.now() / 1000));
+  $('titulo').textContent = k === 'pagada' || k === 'entregada' ? 'Pagaste' : k === 'tardio' ? 'Pago recibido fuera de tiempo' : 'Vas a pagar';
   $('sello').hidden = !(k === 'pagada' || k === 'entregada');
   $('ayuda').hidden = !esp;
   $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, resto / 3.6) + '%' : '0%'; // 360 s = vigencia mínima del QR
   $('cuenta').textContent = esp ? 'Vence en ' + String(Math.floor(resto / 60)).padStart(2, '0') + ':' + String(resto % 60).padStart(2, '0') : '';
 }
+let ocupado = false; // una consulta a la vez
 async function cargar() {
-  if (noexiste) return;
+  if (noexiste || ocupado) return;
+  ocupado = true;
   try { const r = await fetch('/api/pago/' + encodeURIComponent(token)); if (r.status === 404) { noexiste = true; return pinta(); } if (!r.ok) throw 0; v = await r.json(); falla = false; } catch { falla = true; }
-  pinta();
+  ocupado = false; pinta();
 }
 cargar(); setInterval(cargar, 2000); setInterval(pinta, 1000);
 </script>

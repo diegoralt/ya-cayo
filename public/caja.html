@@ -14,7 +14,7 @@
   button { font:inherit; font-weight:600; min-height:44px; padding:8px 14px; border-radius:10px; border:1.5px solid var(--tinta); background:#fff; color:var(--tinta); cursor:pointer; transition:transform .08s, background .15s; }
   button:active:not(:disabled) { transform:translateY(1px) scale(.99); }
   button:disabled { opacity:.45; cursor:not-allowed; }
-  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #f5a623; outline-offset:2px; }
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #0b5cd5; outline-offset:2px; }
   .estado { padding:10px 12px; border-radius:10px; font-weight:700; border:1.5px solid; font-size:1.05rem; }
   .estado small { display:block; font-weight:400; font-size:.9rem; }
   .e-info { background:var(--infobg); color:var(--info); border-color:#b8b3ee; }
@@ -28,7 +28,7 @@
   .ticket::after { content:""; position:absolute; left:0; right:0; top:100%; height:10px; background:linear-gradient(135deg,var(--papel) 50%,transparent 50%) 0 0/14px 10px repeat-x, linear-gradient(225deg,var(--papel) 50%,transparent 50%) 0 0/14px 10px repeat-x; }
   .sello { width:max-content; max-width:100%; margin:18px auto 14px; transform:rotate(-6deg); border:3px solid var(--ok); color:var(--ok); background:rgba(255,255,255,.9); padding:2px 12px; font:900 2rem/1.2 var(--red); text-transform:uppercase; letter-spacing:.03em; border-radius:8px; animation:sella .38s cubic-bezier(.2,1.5,.4,1) both; }
   .sello.dup { border-color:var(--warn); color:var(--warn); font-size:1.1rem; }
-  @keyframes sella { from { transform:rotate(-6deg) scale(2.4); opacity:0; } to { transform:rotate(-6deg) scale(1); opacity:1; } }
+  @keyframes sella { from { transform:rotate(-6deg) scale(1.5); opacity:0; } to { transform:rotate(-6deg) scale(1); opacity:1; } }
   @media (prefers-reduced-motion:reduce) { .sello { animation:none; } .barra i { transition:none; } button { transition:none; } }
 
   header { display:flex; flex-wrap:wrap; gap:6px 12px; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--tinta); color:#fff; }
@@ -42,7 +42,7 @@
   #pin { -webkit-text-security:disc; text-security:disc; letter-spacing:.2em; }
   input { font:inherit; width:100%; padding:10px; border:1.5px solid #8c86a6; border-radius:10px; background:#fff; }
   input#monto { font:700 1.4rem var(--mono); }
-  button.p { background:var(--ac); color:#fff; border:0; width:100%; box-shadow:0 3px 0 var(--acd); } button.p:hover:not(:disabled) { background:#e02b78; }
+  button.p { background:var(--ac); color:#fff; border:0; width:100%; box-shadow:0 3px 0 var(--acd); } button.p:hover:not(:disabled) { background:#b81d5f; }
   button.p:disabled { box-shadow:none; background:#8c86a6; opacity:1; color:#fff; }
   button.grande { min-height:58px; font-size:1.2rem; font-weight:800; }
   .reco { border:1px solid #e6c36b; background:var(--warnbg); border-radius:10px; padding:0 10px 8px; margin-bottom:10px; font-size:.9rem; }
@@ -61,6 +61,7 @@
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
   .m { border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--bg); } .m b { display:block; font:800 1.45rem var(--mono); font-variant-numeric:tabular-nums; }
   .err { color:var(--bad); background:var(--badbg); border:1px solid #e49a9d; border-radius:10px; padding:8px 12px; margin-top:10px; font-weight:600; } .err:empty { display:none; }
+  #resumen2 { overflow-wrap:anywhere; } .cab > div { min-width:0; }
   #red { margin:0; } #loginerr { margin-top:0; margin-bottom:10px; }
 </style>
 </head>
@@ -196,20 +197,22 @@ function pintaDetalle() {
   $('sello').hidden = !(n === 'Pagado' || n.startsWith('Entregado')); $('sello').className = 'sello' + (n.includes('duplicado') ? ' dup' : ''); $('sello').textContent = n.includes('duplicado') ? 'Ya cayó ×2' : 'Ya cayó';
   $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, resto / 3.6) + '%' : '0%'; // 360 s = vigencia mínima del QR
   $('info').textContent = `Transacciones: ${o.transacciones} · entregas: ${o.entregas}`;
-  $('entregar').disabled = o.estado !== 'pagada';
-  $('entregar').textContent = o.estado === 'entregada' ? 'Ya entregado ✔' : o.estado === 'pagada' ? 'Entregar' : 'Entregar · sin pago confirmado';
+  $('entregar').disabled = o.estado !== 'pagada' || falla; // sin conexión no se entrega: el dato puede estar viejo
+  $('entregar').textContent = o.estado === 'entregada' ? 'Ya entregado ✔' : o.estado === 'pagada' ? 'Entregar' : n === 'Pago tardío' ? 'Pago fuera de plazo · revisar a mano' : 'Entregar · sin pago confirmado';
   $('enlace').href = '/pagar/' + o.token; $('enlace').textContent = location.origin + '/pagar/' + o.token;
 }
 let falla = false;
+let ocupado = false; // una consulta a la vez: evita que una respuesta lenta pise a otra más nueva
 async function refrescar() {
-  if (!pin) return;
+  if (!pin || ocupado) return;
+  ocupado = true;
   try {
     ordenes = await api('/ordenes'); falla = false;
     for (const o of ordenes) { if (previo[o.id] === 'pendiente' && o.estado === 'pagada') voz('Ya cayó el pago de ' + pesos(o.monto_centavos).replace('$', '') + ' pesos'); previo[o.id] = o.estado; }
     if (selId == null && ordenes[0]) selId = ordenes[0].id;
     pintaLista(); pintaDetalle();
     const m = await api('/metricas'); comision = m.comision; pintaMetricas(m); pintaReco();
-  } catch (e) { if (pin) { falla = true; pintaDetalle(); } }
+  } catch (e) { if (pin) { falla = true; pintaDetalle(); } } finally { ocupado = false; }
 }
 function pintaMetricas(m) {
   const seg = (x) => x == null ? '—' : x.toFixed(1) + ' s';
@@ -221,17 +224,17 @@ function pintaReco() { const c = Math.round(Number($('monto').value) * 100 * com
 $('monto').oninput = pintaReco;
 
 async function crear(metodo) {
-  $('err').textContent = '';
+  $('err').textContent = ''; $('cobrar').disabled = $('otro').disabled = true;
   try {
     const o = await api('/ordenes', { method: 'POST', body: JSON.stringify({ concepto: $('concepto').value, monto: $('monto').value, metodo }) });
     if (!o.registrado) selId = o.id;
     await refrescar();
     if (!o.registrado) $('detalle').scrollIntoView({ block: 'start' }); // el QR es lo siguiente que el cajero necesita
-  } catch (e) { $('err').textContent = e.message; }
+  } catch (e) { $('err').textContent = e.message; } finally { $('cobrar').disabled = $('otro').disabled = false; }
 }
 $('cobrar').onclick = () => crear('codi');
 $('otro').onclick = () => crear('otro');
-const accion = (ruta) => async () => { $('errd').textContent = ''; try { await api(`/ordenes/${selId}/${ruta}`, { method: 'POST' }); } catch (e) { $('errd').textContent = e.message; } refrescar(); };
+const accion = (ruta) => async () => { const b = $(ruta === 'entregar' ? 'entregar' : 'conciliar'); $('errd').textContent = ''; b.disabled = true; try { await api(`/ordenes/${selId}/${ruta}`, { method: 'POST' }); } catch (e) { $('errd').textContent = e.message; } await refrescar(); if (ruta !== 'entregar') b.disabled = false; };
 $('entregar').onclick = accion('entregar');
 $('conciliar').onclick = accion('conciliar');
 $('nuevo').onclick = () => { $('app').scrollIntoView({ block: 'start' }); $('concepto').focus({ preventScroll: true }); };
