@@ -1,5 +1,7 @@
 # Estado — ya-cayo
 
+> **Cambios en curso (en este orden):** 1) `docs/changes/2026-11-15-hosting-vercel/` (Vercel + Supabase; solo intent, falta fase 1 de revisión, plan y aprobación); 2) `docs/changes/2026-11-15-agente-v2/` (plan aprobado por Diego; se implementa después del hosting y sus hitos se reescriben sobre Postgres). Sin código hasta aprobar el plan del hosting.
+
 > Se sobrescribe cada sesión. Última actualización: 2026-11-15 (sesión larga; seguir en sesión nueva tras `/clear`).
 
 ## Siguiente acción (1.er corte ENVIADO el 15-nov-2026; 2.º corte sáb 12-dic 23:59 CDMX)
