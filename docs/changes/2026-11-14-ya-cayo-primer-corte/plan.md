@@ -1,0 +1,54 @@
+# Plan: Ya Cayó, primer corte del hackatón (caja con confirmación del servidor)
+
+- **Intent:** [intent.md](intent.md)
+- **Aprobado:** 2026-11-14 por Diego (chat: «avancemos con lo siguiente»; tope de presupuesto y alcance confirmados en mensajes previos)
+- **Revisado por:** Codex · `revision-plan-codex.md` (hash 7261e00 corregido; cierre en `verificacion-p1-codex.md`). H7 y el tope de 6M se añadieron después sin nueva revisión. Hash de `plan-candidato.md` al aprobar: 2c04922b31fef1118c56feefa375d01755fa1ac7
+- **Presupuesto:** Codex ≤ 5% semanal · Claude ≤ 6M de peso, contados desde el intent
+## Context
+Caja de mostrador con confirmación del servidor: QR de monto fijo por ticket, «pagado» solo por webhook firmado + polling, entrega única, métrica antes/después. Repo y demo públicos, dinero real de $0.01. Insumos: `intent.md`, `sintesis.md`, `revision-codex.md` (fase 1), `revision-plan-codex.md` (fase 2). Repo vacío: nada que reutilizar salvo `.gitignore`.
+
+## Decisiones de diseño
+- **Stack mínimo:** Node 24, `node:http` sin framework, `node:sqlite` (un archivo), `node --test`. Única dependencia: `standardwebhooks` (SDK oficial de firma). Front: HTML + JS plano, sin build. `ponytail:` sin framework ni ORM.
+- **Conciliar y entregar son cosas distintas.**
+  - `reconcile(orden)` consulta `GET /transaction/codi/qr/{qrId}` y **solo registra hechos**: transacciones vistas, `pagada`, `tardío`, `duplicado`. El webhook firmado y el polling solo disparan `reconcile`; **nunca entregan**.
+  - `entregar(orden)` lo solicita únicamente el botón humano.
+- **Transiciones monotónicas** (`pendiente → pagada → entregada`; `vencida`, `tardío`, `duplicado` como marcas):
+  - Conciliar **nunca** degrada ni reabre una orden `entregada`; solo añade transacciones y excepciones.
+  - Tras cada GET, `reconcile` relee el estado **dentro de una transacción SQLite corta** (`BEGIN IMMEDIATE`) y escribe solo si el estado sigue siendo el esperado.
+  - `entregar` = `UPDATE ordenes SET estado='entregada' WHERE id=? AND estado='pagada'` + comprobar filas afectadas = 1 + `INSERT INTO entregas(orden_id UNIQUE)`, **en la misma transacción con commit/rollback conjunto**.
+  - Dedup persistente: `eventos(webhook_id PK)`, `transacciones(transaction_id PK)`.
+- **Reglas de «pagada»** (dentro de `reconcile`): transacción `PAID`, `amount` == monto de la orden, `currency` MXN, perteneciente al QR de esa orden, `datePaid` ≤ vencimiento. Con GET en `PENDING`, error o respuesta inválida: ninguna habilitación y la UI muestra «consulta fallida, reintentando».
+- **Ventana de conciliación separada del vencimiento del QR:**
+  - Orden viva: polling cada ~5 s, con reintento tras error. Plazo objetivo de recuperación con webhook perdido: ≤ 15 s.
+  - **Tras vencer o entregar:** polling lento (60 s) durante 30 min, para descubrir pagos justo antes del vencimiento, tardíos y segundos pagos; después, solo el botón «reconciliar ahora».
+  - Pago anterior al vencimiento descubierto tarde → `pagada` (entregable); posterior → `tardío` sin entrega; segundo pago tras entregar → `duplicado`, contador sigue en uno.
+- **Sin herramienta de «marcar pagado» ni «entregar» para el agente.** `concept`/`metadata` son datos.
+- **Pruebas locales, sin túnel ni dinero:** `node --test` corre contra un cliente de pey inyectado (falso) y firmas generadas con un secreto de prueba; H2 y H3 no dependen de la URL pública. El túnel solo se usa en H1 (contrato real), en el e2e de H4 y en la entrega.
+- **Hosting:** app en el Mac de Diego + `cloudflared` con túnel con nombre en su subdominio; un solo webhook de la key en `https://<subdominio>/webhook`. **Compromiso temporal de Diego: Mac, app y túnel activos (`caffeinate`) desde la prueba H1 hasta migrar al host fijo (H7).** Recuperación: reiniciar app y túnel (URL no cambia). **Servidor portable desde H0:** `PORT` y `DB_PATH` por variables de entorno, `/health`, key y secreto solo como variables del host. El webhook de pey usa el subdominio, así que migrar = cambiar el CNAME, sin tocar el portal de pey ni el formulario. Host candidato: Railway o Fly.io (siempre encendido, volumen para SQLite); no planes gratuitos que se duermen, porque el polling vive en el proceso.
+- **Secretos:** `.env` (ignorado) con `PEY_API_KEY` y `PEY_WEBHOOK_SECRET`. El servidor solo sirve `public/`: nunca el directorio del repo, SQLite ni credenciales de cloudflared. Nada en cliente ni en respuestas, incluidos errores.
+
+## Hitos
+- [ ] **H0 Base:** `package.json`, `.env.example`, servidor con `/health`, túnel → app · valida: `curl -fsS https://<subdominio>/health`
+- [ ] **H1 Compuerta pey (Diego + sonda desechable), límite sáb 21:00:** `evidencia-pey.md` saneado. **Falla** salvo que conste: cuenta operativa (`ACTIVE`/sandbox), pago de $0.01 recibido en la URL final, firma real validada con el SDK, y pago descubierto por `GET /transaction/codi/qr/{id}`. Solo «QR pagado dos veces» admite NO VERIFICADO + prueba sintética. «Polling solo» requiere aprobación escrita de Diego. **Si H1 falla a la hora límite: decisión explícita de Diego** (recorte o escalar a organizadores/legal) · valida: a mano, con esa lista como criterio.
+- [x] **H2 Núcleo de estado y entrega única** · valida: `node --test` con casos nombrados que fijan la invariante: (a) reenvío secuencial; (b) intercalación explícita «GET A → GET B → confirmar A → entregar → aplicar B» sin reabrir ni duplicar; (c) dos `transactionId` distintos del mismo ticket → excepción, una entrega; (d) fallo entre UPDATE e INSERT → rollback, estado coherente; (e) reinicio del proceso; (f) repetición de «entregar» = una fila. Al pasar: cambiar `verificación:` de `CLAUDE.md` a `` `node --test` ``.
+- [ ] **H3 Webhook firmado + polling por QR** · valida: `node --test` con: firma ausente/incorrecta/cuerpo alterado → sin cambio de estado; pago de otro ticket o monto distinto → no habilita; webhook ausente + pago anterior al vencimiento que aparece después → `pagada`; pago posterior → `tardío` sin entrega; `PENDING`/error → nada habilitado; segundo pago descubierto tras entregar → `duplicado`, contador 1.
+- [ ] **H4 UI de caja + métrica:** crear cobro, QR, «esperando confirmación», entregar, estados vencido/tardío/duplicado/consulta fallida, alerta de voz (`speechSynthesis`), contador antes/después (clics, cambios de app, tiempo), perfiles de caja ficticios rotulados · valida: `node --test` + `checklist-e2e.md` (lista reproducible con resultado esperado por estado y por métrica) ejecutada con un pago real de $0.01 en la URL pública, resultados anotados.
+- [ ] **H5 Agente #1 (condicional):** solo si H1–H4 en verde y los artefactos de H6 listos el dom a las 9:00; si no, queda fuera y se dice en la descripción · valida: `node --test`: propuesta → confirmación humana → creación del cobro; ninguna ruta del agente muta pago ni entrega.
+- [ ] **H6 Publicación:** checklist y constancia saneada antes de marcarlo: video ≤3 min (duración medida; QR vencido preparado y rotulado), descripción ≤500 y instrucciones ≤1000 palabras (`wc -w`), declaración de componentes previos (ninguno reutilizado) y de terceros (Node, `standardwebhooks`, cloudflared), integrantes, repo público, formulario enviado con constancia · valida: `sh scripts/barrido-secretos.sh` (sale ≠0 ante hallazgo **y** ante error de lectura/ejecución; escanea árbol, `git log -p`, `public/`, evidencias, respuestas de éxito y error de la URL pública, patrones de key/secreto/token y los valores reales de `.env`, sin imprimirlos), revisión manual del video, y acceso desde otra conexión. **Si hay exposición: detener publicación, sanear y rotar key y secreto antes de repetir.**
+
+- [ ] **H7 Migración a host fijo (tras el envío, lun 16–mar 17-nov):** desplegar en Railway/Fly con volumen, variables de entorno, cambiar el CNAME del subdominio, mantener el túnel como respaldo hasta confirmar · valida: `curl -fsS https://<subdominio>/health` desde otra conexión con el Mac apagado, más un cobro real de $0.01 de inicio a fin con entrega en 1. Requiere aprobación de Diego (costo, tarjeta y cambio DNS).
+
+## Calendario (CDMX)
+Sáb: H0 y H1 (límite 21:00; sin H1 en verde no se construye H3). Sáb noche: H2–H3, dormir. Dom 9:00: decidir H5. H4 y prueba pública en la mañana, con bloque propio para el video. **Dom 10:30 congelar alcance.** Dom 12:00 formulario enviado con constancia (1 h de margen). Lun 16-nov: alta de CLABE propia.
+
+## Revisión
+Fase 2 hecha (`revision-plan-codex.md`). Fase 4 recortada: barrido de secretos + pruebas de entrega única propios antes del push; revisión completa de código en el 2.º corte (12-dic).
+
+## Presupuesto propuesto
+Codex ≤ 5% semanal · Claude ≤ 6M de peso (subido de 2M por Diego el 14-nov; la fase de intent+plan ya consumió 2.5M).
+
+## Verificación global
+`node --test` en verde; un cobro real de $0.01 de inicio a fin en la URL pública, con el contador de entregas en 1 tras reenviar el evento.
+
+- 2026-11-14: H1 bloqueado porque no hay una persona con CoDi activo que pague el QR. Se avanza con H0, H2 y H3 en local con cliente de pey falso. **H1 sigue siendo condición de «terminado»**: H3 no se da por cerrado hasta validar la firma real. Vías para desbloquear: que otra persona con CoDi activo pague los $0.01 (el QR no exige que pague Diego). «Polling solo» sigue requiriendo aprobación escrita de Diego.
+- 2026-11-14: H2 cerrado (`node --test`, 8 casos del núcleo; `verificación:` de CLAUDE.md ahora es `node --test`). H3: código y 9 casos en verde con firmas generadas con secreto de prueba; **sigue abierto hasta H1** (firma real, forma real de la respuesta por QR, paginación y `datePaid` están NO VERIFICADOS en `src/pey.js`). H0: `/health` verificado en local; falta el curl por el túnel de Diego.
