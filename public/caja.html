@@ -75,12 +75,12 @@
 <body>
 <header>
   <h1 class="marca"><i aria-hidden="true">✓</i>Ya Cayó</h1>
-  <span><span class="rotulo">Caja 1 · perfil ficticio de demo</span></span>
+  <span><span class="rotulo">Caja 1 · perfil de ejemplo</span></span>
 </header>
 <main>
   <div id="red" class="estado e-warn" role="status" hidden>⚠ Sin conexión con el servidor · reintentando<small>Lo que ves puede estar desactualizado. No entregues hasta que vuelva.</small></div>
   <section id="login" class="card ancho" hidden>
-    <h2>PIN de demo</h2>
+    <h2>PIN de acceso</h2>
     <div id="loginerr" class="err" role="alert"></div>
     <label class="campo"><span>PIN</span><input id="pin" type="text" name="codigo-caja" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="numeric" enterkeyhint="go" data-bwignore data-lpignore="true" data-1p-ignore></label>
     <button class="p" id="entrar" type="button">Entrar</button>
@@ -109,15 +109,15 @@
   <section id="app" class="card" hidden>
     <h2>Nuevo cobro</h2>
         <details class="ag" id="agente" open>
-      <summary>Agente de captura <span class="rotulo">simulado con reglas, sin IA</span></summary>
+      <summary>Agente de captura <span class="rotulo">por reglas, sin IA</span></summary>
       <input id="agtxt" autocomplete="off" placeholder="Ej.: dos cafés y un pan" aria-label="Qué hay que cobrar">
       <button type="button" id="agbtn" class="p">Proponer cobro</button>
       <div class="menu" id="menu" aria-label="Menú"></div>
       <div id="agres" class="mut" role="status" aria-live="polite"></div>
-      <label class="demo"><input type="checkbox" id="demo" checked><span><b>Modo demo:</b> el total de lista es ilustrativo y el cobro real es de <b>$0.01</b>. Desmárcalo para cobrar el total (máx. $50).</span></label>
+      <label class="demo"><input type="checkbox" id="demo" checked><span><b>Cobro de prueba:</b> el total de lista es ilustrativo y se cobra <b>$0.01</b>. Desmárcalo para cobrar el total (máx. $50).</span></label>
     </details>
     <label class="campo"><span>Concepto del ticket</span><input id="concepto" autocomplete="off" value="Ticket 1 · 2 cafés"></label>
-    <label class="campo"><span>Precio de lista (MXN, máx. $50 en la demo)</span><input id="monto" inputmode="decimal" autocomplete="off" value="0.01"></label>
+    <label class="campo"><span>Precio de lista (MXN, máx. $50)</span><input id="monto" inputmode="decimal" autocomplete="off" value="0.01"></label>
     <details class="reco">
       <summary><b>Recomendación al vendedor</b> <span class="rotulo">supuesto, no verificado</span> <b id="evitada">—</b></summary>
       <div><span>Comisión de tarjeta evitada <small id="supuesto"></small></span></div>
@@ -273,10 +273,10 @@ function pintaAg() {
   const r = $('agres'); r.innerHTML = '';
   if (!sel.length) return;
   const ul = document.createElement('ul'); for (const i of sel) { const li = document.createElement('li'); li.textContent = `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n} · $${cant[i.id] * i.p}`; ul.append(li); }
-  const d = document.createElement('div'); d.textContent = `Total de lista: $${total}` + ($('demo').checked ? ' (ilustrativo) · cobro de demo: $0.01' : '');
+  const d = document.createElement('div'); d.textContent = `Total de lista: $${total}` + ($('demo').checked ? ' (ilustrativo) · se cobra $0.01' : '');
   const lim = document.createElement('button'); lim.type = 'button'; lim.textContent = 'Vaciar'; lim.onclick = () => { cant = {}; pintaAg(); };
   r.append(ul, d, lim);
-  $('concepto').value = (($('demo').checked ? 'Demo ' : '') + sel.map((i) => `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
+  $('concepto').value = (sel.map((i) => `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
   $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); pintaReco();
 }
 $('agbtn').onclick = () => { const p = proponer($('agtxt').value); if (p.noEntendido) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } cant = p.cant; pintaAg(); };

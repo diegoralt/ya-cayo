@@ -16,6 +16,7 @@
 - Métrica antes/después medida por el servidor: tiempo de cobro, latencia de confirmación, entregas por orden, aceptación de CoDi.
 - Recomendación al vendedor: estima la comisión de tarjeta evitada y sugiere un bono por usar CoDi (supuesto configurable y rotulado; el vendedor decide, el precio no cambia).
 - Guía «¿Aún no tienes CoDi?» para el pagador, con ilustraciones genéricas.
+- Asistente de captura **por reglas, sin IA**: de un texto como «dos cafés y un pan» propone concepto y monto. El cajero confirma y el servidor fija el monto del QR; el asistente no puede marcar pagado ni entregar. El video usa un total de lista ilustrativo y cobra $0.01 reales; la caja lo indica en pantalla.
 
 **Qué es real y qué es simulado**
 - Los cobros son de $0.01 MXN. Se verificaron pagos reales de $0.01 el 15-nov-2026: el servidor los confirmó por polling en 1 a 3 s y el webhook `codi.qr.payment_received` llegó con firma Standard Webhooks válida (pey registró 200 y el servidor guardó el evento). Los casos de reenvío, pago tardío, duplicado y consulta fallida solo se probaron con 26 pruebas automáticas y un pey simulado. Limitación conocida: Bot Fight Mode de Cloudflare (plan gratuito) desafía los envíos del webhook de pey; para la demo se apagó en la zona y para el 2.º corte se moverá a un host sin ese bloqueo.
