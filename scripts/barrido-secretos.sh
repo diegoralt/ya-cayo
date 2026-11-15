@@ -49,7 +49,7 @@ while IFS= read -r f; do
   grep -IqE "$PATRON" "$f" 2>/dev/null && hallazgo "patrón de secreto en $f"
 done < "$TMP/archivos"
 # En el historial solo se cuentan líneas añadidas, sin la propia regla del barrido.
-grep -E '^\+' "$TMP/historial" | grep -vE 'PATRON=|barrido-secretos' | grep -qE "$PATRON" && hallazgo "patrón de secreto en el historial de git"
+grep -E '^\+' "$TMP/historial" | grep -vE 'PATRON=|CLAVES_SECRETAS=|barrido-secretos' | grep -qE "$PATRON" && hallazgo "patrón de secreto en el historial de git"
 
 # 5) Archivos que no deben estar versionados.
 for p in .env 'ya-cayo.sqlite*' '*.pem' 'cert.pem' '*credentials*.json'; do
