@@ -1,5 +1,7 @@
-// Cliente de la API de pey. NO VERIFICADO contra respuestas reales hasta H1: forma de la lista de
-// transacciones por QR, nombre del parámetro de paginación y formato de `datePaid`.
+// Cliente de la API de pey. Forma de GET /transaction/codi/qr/{id} tomada del OpenAPI 2026-10-20:
+// {items:[...], nextToken|null}, `?nextToken=`, datePaid entero Unix, amount en MXN. Documentado, no
+// observado en una respuesta real hasta H1. `amount` es el total: si pey cobrara fee/propina, no coincidiría
+// con el monto de la orden y la transacción quedaría `invalida` (conservador).
 const BASE = 'https://api.pey.mx';
 
 const aUnix = (v) => (typeof v === 'number' ? v : v ? Math.floor(Date.parse(v) / 1000) : undefined);
@@ -36,7 +38,7 @@ export function crearClientePey({ apiKey = process.env.PEY_API_KEY, fetchFn = fe
       let token;
       do {
         const r = await llamar(`/transaction/codi/qr/${encodeURIComponent(qrId)}${token ? `?nextToken=${encodeURIComponent(token)}` : ''}`);
-        const items = Array.isArray(r) ? r : (r.transactions ?? r.items ?? r.data ?? []);
+        const items = r.items ?? [];
         out.push(...items.map(normalizarTx));
         token = r.nextToken;
       } while (token);
