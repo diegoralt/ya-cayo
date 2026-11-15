@@ -3,7 +3,7 @@
 > Antes de enviar: completar `[PENDIENTE]`. Esta versión del repo no lleva el PIN; el texto del formulario está en `instrucciones.local.md` (ignorado por git). Rotar el PIN después del evento.
 
 **URL de la demo (pública, sin invitación):** https://pey.drkingsia.com
-**PIN de la caja:** [PIN de demo: se indica solo en el texto del formulario, no en el repo] · **Repo:** [PENDIENTE: URL del repo público]
+**PIN de la caja:** [PIN de demo: se indica solo en el texto del formulario, no en el repo] · **Repo:** https://github.com/diegoralt/ya-cayo
 
 ## Qué necesitas
 Un celular con la app de un banco con CoDi activo, para pagar $0.01 MXN real. Si no tienes CoDi, puedes recorrer toda la interfaz sin pagar (pasos 1 a 3) y ver el video.
@@ -25,7 +25,7 @@ Un celular con la app de un banco con CoDi activo, para pagar $0.01 MXN real. Si
 - **Recomendación al vendedor:** es una estimación con supuesto (3 %) y el sistema no cambia el precio.
 
 ## Lo que no hace
-No reembolsa (pey no lo permite por API: una devolución es un registro manual). Un pago hecho después del vencimiento queda como «tardío» y un segundo pago del mismo ticket como «duplicado»; ninguno genera otra entrega. [PENDIENTE: indicar cuáles de estos casos se probaron con un pago real y cuáles solo con pruebas automáticas.]
+No reembolsa (pey no lo permite por API: una devolución es un registro manual). Un pago hecho después del vencimiento queda como «tardío» y un segundo pago del mismo ticket como «duplicado»; ninguno genera otra entrega. Hasta este corte ningún caso se ha probado con un pago real: están cubiertos solo por pruebas automáticas con un pey simulado. Si no tienes CoDi, esta es la forma de revisar el comportamiento (`node --test`).
 
 ## Pruebas automáticas
 `npm install` y `node --test` (26 pruebas: entrega única, firma del webhook, polling, límites). Para correr local: copiar `.env.example` a `.env`, completar valores y `npm start`.
@@ -33,4 +33,4 @@ No reembolsa (pey no lo permite por API: una devolución es un registro manual).
 ## Declaración
 - **Componentes previos:** ninguno; la integración con pey se construyó durante el hackatón.
 - **De terceros:** Node.js, `standardwebhooks` (SDK oficial), cloudflared (túnel), API de pey. Ilustraciones SVG propias, sin marcas.
-- **Integrantes:** Diego [PENDIENTE: apellido y correo]. **Cuenta que cobra:** CLABE de prueba de los organizadores (el titular se muestra en la demo).
+- **Integrantes:** Diego (contacto en el formulario). **Cuenta que cobra:** CLABE de prueba de los organizadores (el titular se muestra en la demo).

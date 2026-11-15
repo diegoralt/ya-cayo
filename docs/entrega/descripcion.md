@@ -18,11 +18,11 @@
 - Guía «¿Aún no tienes CoDi?» para el pagador, con ilustraciones genéricas.
 
 **Qué es real y qué es simulado**
-- Los cobros son reales, de $0.01 MXN. [PENDIENTE H1: confirmar que se pagó un QR real y que el webhook firmado llegó; si no, decir exactamente qué se probó.]
+- Los cobros son de $0.01 MXN. Al cierre de este corte no se ha verificado un pago real de punta a punta: la firma real del webhook y el formato real del QR de pey están sin validar. La lógica se probó con 26 pruebas automáticas y un pey simulado; el pago real queda para el 2.º corte.
 - Los perfiles de caja son ficticios y el QR vencido del video está preparado; ambos se rotulan.
-- Las mediciones «antes» son cronometrajes manuales de una sola persona (n = 3), no una encuesta.
+- Las mediciones «antes» son 3 cronometrajes manuales.
 
 **Alcance y límites**
 En el hackatón es una instancia con un único titular: los cobros caen a la CLABE de prueba que dieron los organizadores (el nombre del titular se muestra en la demo); al dar de alta mi cuenta CoDi propia, caerán a ella. Cada comercio despliega la suya con cuenta y API key propias; no es una plataforma multi-comercio ni cobra a nombre de terceros. Sin reembolso por API: una devolución es un registro manual. La demo tiene PIN, tope de $50 y máximo 3 cobros vivos.
 
-**Tecnología**: Node 24 (`node:http`, `node:sqlite`), HTML y JavaScript sin framework, SDK `standardwebhooks`. Túnel de Cloudflare. Desarrollado con Claude Code y Codex.
+**Tecnología**: Node 24 (`node:http`, `node:sqlite`), HTML y JS sin framework, SDK `standardwebhooks`, túnel de Cloudflare. Desarrollado con Claude Code y Codex.
