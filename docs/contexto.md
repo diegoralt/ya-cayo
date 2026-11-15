@@ -75,7 +75,7 @@ Portal: portal.mipey.mx (perfil → Finanzas: cuenta `stripe` o `codi` → Desar
 - Giros admitidos: POS, gestión, e-commerce, conciliación.
 
 ## Pendiente
-1. Proponer 2–3 candidatos de solución, contrastados con los criterios y las restricciones (Mostrador, el POS para gimnasios multi-tenant en `[ruta local]`, encaja con los giros admitidos; decide Diego si lo usa).
+1. Proponer 2–3 candidatos de solución, contrastados con los criterios y las restricciones.
 2. Elegir solución y nombre (sin sugerir oficialidad de pey/Banxico).
 3. Crear el proyecto y migrar este contexto a su `docs/`.
 4. Mañana en sede: confirmar fecha de entrega, si Cursor es requisito, recibir cuentas de prueba, leer el Documento de Premios.
@@ -88,15 +88,14 @@ Portal: portal.mipey.mx (perfil → Finanzas: cuenta `stripe` o `codi` → Desar
 - **20 ideas oficiales** (no obligatorias): 1 QR→solicitud de pago · 2 pedidos por WhatsApp · 3 cotización que arranca el trabajo · 4 anticipo que confirma una cita · 5 cobro al entregar · 6 imprime al pagar (impresora) · 7 cabina de retratos · 8 tiempo de uso (equipo) · 9 casillero (cerradura) · 10 acceso por sesión · 11 historia que paga el público · 12 mural colectivo · 13 música que responde al dinero · 14 robot por turno (robot) · 15 fábrica de encargos con IA · 16 cuenta entre varias personas · 17 regalo colectivo · 18 taller con lugares pagados · 19 facturas que se concilian solas · 20 comidas patrocinadas.
 - No se guardan aquí las contraseñas de WiFi de la hoja.
 
-## Análisis de soluciones (2026-11-14) · ver `analisis-soluciones/`
-- `brief.md` (encargo a Codex, a ciegas) · `analisis-claude.md` · `codex-hallazgos.md` (8 candidatos, precedentes, refutación de WhatsApp, plan de 24 h).
+## Análisis de soluciones (2026-11-14) · (análisis archivado fuera del repo)
 - **Convergencia:** el núcleo de pagos común (pendiente/vencido/pagado/pago tardío/duplicado/devolución; el servidor manda; idempotencia por `transactionId`; polling de respaldo) y "cupo pagado" (ideas 18+4+10) como la mejor base. Codex lo puntúa 8.70 (factibilidad 9); yo lo dejé 2.º.
 - **Divergencia:** yo puse "Mesa compartida" 1.º; Codex la deja última (factibilidad 5: concurrencia, parciales y varios pagadores en vivo). Se acepta su crítica.
 - **Alternativas finalistas:** Rescate de Lote (8.55, requiere un comercio real y su lote), EntregaLista (8.45, cotización + anticipo + saldo + descarga).
 - **Hallazgos que cambian el plan:** no hay endpoint de reembolso documentado (devolución = registro manual); no usar `amount: 0` en precio cerrado; el contrato del webhook no está verificado (polling por defecto, webhook si se valida a tiempo); un webhook tardío no prueba pago tardío; no esperar 360 s en el video (preparar el caso vencido y rotularlo); primeras 2 h = confirmar CLABE/API key/app bancaria, bloqueo común a todos los candidatos.
 - Fuentes de Codex (Interledger, Kotak, Stripe/Briefcase, PayPal, políticas de WhatsApp) sin verificar por mí.
 
-## Ronda 2 (2026-11-14) · ver `analisis-soluciones/ronda2/sintesis.md`
+## Ronda 2 (2026-11-14) · (análisis archivado fuera del repo)
 Tres puntuadores a ciegas (Claude, Codex, Opus) sobre 38+ ideas con rúbrica con anclas. **Convergencia:** Mesa compartida (C2) es la única en el top 4 de los tres; Visita firme (N3) y "servicio con autorizaciones pagadas" (P3/X2, propuesta por Opus y por Codex de forma independiente) siguen. Fiado digital (N7) depende de aclarar "préstamos" con legal@pey.mx. Correcciones de API: amount 0 solo en QR; sin cancelación de cobros (un cobro vivo por orden); demo debe declarar el titular real; link de pago como respaldo si el jurado no tiene CoDi.
 
 ## Términos API de pey verificados (2026-11-14; pey.mx/legal/terminos-api, «Última actualización: 13-oct-2026»)
@@ -110,5 +109,5 @@ Leídos por un subagente de lectura; las citas largas vienen parafraseadas (lím
 - **Devoluciones (§2.7):** Koshi no cancela ni revierte; las hace el integrador desde su cuenta. Coincide con «devolución = registro manual».
 - **No aparece:** reutilización de QR (probarlo), garantías de webhooks (§8.1 y §11.1: sin nivel de servicio garantizado).
 
-## Ronda 3 (2026-11-14) · foco adopción · ver `analisis-soluciones/foco-adopcion.md` y `ronda3/sintesis.md`
-Decisiones del usuario: varios comercios, el comercio primero, adopción como filtro. Webhooks leídos (`ronda3/webhooks.md`). Los tres puntuadores coinciden en la **caja de mostrador con confirmación del servidor** como mejor candidato. Codex señala que los términos de pey exigen autorización escrita para plataformas que registran comercios: diseño defendible = replicable por comercio (key propia), una instancia con titular único en el hackatón. Pendiente: que el usuario confirme ese ajuste a «varios comercios» y el nombre; luego crear el proyecto.
+## Ronda 3 (2026-11-14) · foco adopción · (análisis archivado fuera del repo)
+Decisiones del usuario: varios comercios, el comercio primero, adopción como filtro. Los tres puntuadores coinciden en la **caja de mostrador con confirmación del servidor** como mejor candidato. Codex señala que los términos de pey exigen autorización escrita para plataformas que registran comercios: diseño defendible = replicable por comercio (key propia), una instancia con titular único en el hackatón. Pendiente: que el usuario confirme ese ajuste a «varios comercios» y el nombre; luego crear el proyecto.

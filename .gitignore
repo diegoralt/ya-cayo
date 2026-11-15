@@ -4,5 +4,4 @@
 node_modules/
 *.log
 .DS_Store
-docs/analisis-soluciones/**/codex-log.txt
 *.sqlite*

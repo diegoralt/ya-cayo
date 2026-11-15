@@ -26,4 +26,4 @@ Uso de CoDi y API de pey 30 · Impacto 25 · Ejecución técnica 15 · Experienc
 - Créditos de IA solo para asistentes al kickoff: confirmar si cubren el agente.
 
 ## Mapa de `docs/`
-`contexto.md` (evento, reglas, API, términos verificados) · `analisis-soluciones/` (rondas 1–3 y puntuaciones; `ronda3/sintesis.md` es el resumen; `ronda3/webhooks.md` lo leído de webhooks; `auditoria-sesgos.md`, `foco-adopcion.md`).
+`contexto.md` (evento, reglas, API, términos verificados) · el análisis de ideas (rondas 1–3) se archivó fuera del repo; sus conclusiones están resumidas en `contexto.md`.
