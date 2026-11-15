@@ -1,9 +1,9 @@
 # Instrucciones de prueba (≤ 1000 palabras) · BORRADOR
 
-> Antes de enviar: completar `[PENDIENTE]`. El PIN de demo va aquí (no en el repo) y se rota después del evento.
+> Antes de enviar: completar `[PENDIENTE]`. Esta versión del repo no lleva el PIN; el texto del formulario está en `instrucciones.local.md` (ignorado por git). Rotar el PIN después del evento.
 
 **URL de la demo (pública, sin invitación):** https://pey.drkingsia.com
-**PIN de la caja:** [PENDIENTE: PIN de demo] · **Repo:** [PENDIENTE: URL del repo público]
+**PIN de la caja:** [PIN de demo: se indica solo en el texto del formulario, no en el repo] · **Repo:** [PENDIENTE: URL del repo público]
 
 ## Qué necesitas
 Un celular con la app de un banco con CoDi activo, para pagar $0.01 MXN real. Si no tienes CoDi, puedes recorrer toda la interfaz sin pagar (pasos 1 a 3) y ver el video.
@@ -31,6 +31,6 @@ No reembolsa (pey no lo permite por API: una devolución es un registro manual).
 `npm install` y `node --test` (26 pruebas: entrega única, firma del webhook, polling, límites). Para correr local: copiar `.env.example` a `.env`, completar valores y `npm start`.
 
 ## Declaración
-- **Componentes previos:** [PENDIENTE: confirmar «ninguno»; la integración con pey se construyó durante el hackatón].
-- **De terceros:** Node.js, `standardwebhooks` (SDK oficial), cloudflared (túnel), API de pey. Ilustraciones genéricas [PENDIENTE: indicar la herramienta con que se generaron].
-- **Integrantes:** [PENDIENTE: nombre y correo].
+- **Componentes previos:** ninguno; la integración con pey se construyó durante el hackatón.
+- **De terceros:** Node.js, `standardwebhooks` (SDK oficial), cloudflared (túnel), API de pey. Ilustraciones SVG propias, sin marcas.
+- **Integrantes:** Diego [PENDIENTE: apellido y correo]. **Cuenta que cobra:** CLABE de prueba de los organizadores (el titular se muestra en la demo).
