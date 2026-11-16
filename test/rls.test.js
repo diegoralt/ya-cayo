@@ -58,17 +58,32 @@ for (const rol of ['anon', 'authenticated']) {
     }
   });
 
-  test(`${rol}: aunque se le diera GRANT por error, RLS (sin política) lo sigue bloqueando`, async () => {
-    for (const t of TABLAS) {
-      const r = await admin.begin(async (s) => {
+  test(`${rol}: aunque se le diera GRANT por error, RLS (sin política) lo sigue bloqueando con datos reales`, async () => {
+    const r = await admin.begin(async (s) => {
+      // fixtures como admin (salta RLS) para que «0 filas» signifique bloqueo y no tabla vacía
+      for (const t of ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas']) await s.unsafe(insertar[t]);
+      const res = {};
+      for (const t of TABLAS) {
+        assert.equal((await s.unsafe(`SELECT 1 FROM ${t}`)).length, 1, `fixture en ${t}`);
         await s.unsafe(`GRANT ALL ON ${t} TO ${rol}`);
-        await s.unsafe(`SET LOCAL ROLE ${rol}`);
-        const filas = await s.unsafe(`SELECT * FROM ${t}`);
-        const ins = await s.savepoint((sp) => sp.unsafe(insertar[t])).catch((e) => e);
-        throw Object.assign(new Error('rollback'), { filas: filas.length, ins });
-      }).catch((e) => e);
-      assert.equal(r.filas, 0, `${rol} SELECT ${t} no debe ver filas`);
-      assert.equal(r.ins.code, '42501', `${rol} INSERT ${t} debe violar RLS`);
+      }
+      await s.unsafe(`SET LOCAL ROLE ${rol}`);
+      for (const t of TABLAS) {
+        const q = ops(t);
+        res[t] = {
+          select: (await s.unsafe(q.SELECT)).length,
+          update: (await s.unsafe(q.UPDATE)).count,
+          delete: (await s.unsafe(q.DELETE)).count,
+          insert: (await s.savepoint((sp) => sp.unsafe(q.INSERT)).catch((e) => e)).code,
+        };
+      }
+      await s.unsafe('RESET ROLE');
+      for (const t of TABLAS) res[t].siguen = (await s.unsafe(`SELECT 1 FROM ${t}`)).length;
+      throw Object.assign(new Error('rollback'), { res });
+    }).catch((e) => e);
+    assert.ok(r.res, r.message);
+    for (const t of TABLAS) {
+      assert.deepEqual(r.res[t], { select: 0, update: 0, delete: 0, insert: '42501', siguen: 1 }, `${rol} sobre ${t}`);
     }
   });
 }
