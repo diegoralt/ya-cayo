@@ -26,19 +26,26 @@ docker exec "$NOMBRE" psql -U postgres -tAc 'select 1' >/dev/null || { echo "ERR
 
 psql_admin() { docker exec -i "$NOMBRE" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 
-# Roles como en Supabase (privilegios por defecto incluidos, para probar que la migración los revoca).
+# Roles como en Supabase (globales). Los privilegios por defecto son por base: se fijan en cada una, para
+# probar que la migración los revoca. `postgres` sirve a rls.test.js; ya_cayo_tpl es la plantilla de la que
+# cada prueba crea su base propia (test/helpers/pg.js).
 psql_admin <<SQL
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE ya_cayo_app LOGIN PASSWORD '$PW' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+CREATE DATABASE ya_cayo_tpl;
+SQL
+
+for base in postgres ya_cayo_tpl; do
+  psql_admin -d "$base" <<SQL
 GRANT USAGE ON SCHEMA public TO anon, authenticated, ya_cayo_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
 SQL
-
-for f in supabase/migrations/*.sql; do
-  echo "migración: $f"
-  psql_admin < "$f"
+  for f in supabase/migrations/*.sql; do
+    echo "migración ($base): $f"
+    psql_admin -d "$base" < "$f"
+  done
 done
 
 umask 077

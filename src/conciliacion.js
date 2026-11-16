@@ -17,12 +17,12 @@ export async function manejarWebhook({ db, pey, secret }, cuerpoCrudo, cabeceras
   } catch {
     return 401;
   }
-  registrarEvento(db, cabeceras['webhook-id']);
+  await registrarEvento(db, cabeceras['webhook-id']);
   // ponytail: el evento puede traer los campos en `data` o en la raíz; confirmar en H1.
   const d = ev?.data ?? ev ?? {};
   const qrId = d.codiQrId;
   if (ev?.type !== 'codi.qr.payment_received' || qrId == null) return 200; // evento ajeno: firmado y ya
-  const o = db.prepare('SELECT id FROM ordenes WHERE qr_id=?').get(String(qrId));
+  const [o] = await db`SELECT id FROM ordenes WHERE qr_id=${String(qrId)}`;
   if (!o) return 200;
   const r = await conciliar(db, pey, o.id);
   return r.ok ? 200 : 503; // 503 invita al reintento; el polling cubre igualmente
@@ -39,11 +39,15 @@ export function iniciarPolling({ db, pey, tickMs = 1000, log = console.error }) 
   const ultimo = new Map();
   const t = setInterval(async () => {
     const now = Math.floor(Date.now() / 1000);
-    for (const o of db.prepare('SELECT id, qr_id, estado, expira_en FROM ordenes WHERE qr_id IS NOT NULL').all()) {
-      if (!debeConciliar(o, now, ultimo.get(o.id))) continue;
-      ultimo.set(o.id, now);
-      const r = await conciliar(db, pey, o.id);
-      if (!r.ok) log(`polling orden ${o.id}: ${r.error}`);
+    try {
+      for (const o of await db`SELECT id, qr_id, estado, expira_en FROM ordenes WHERE qr_id IS NOT NULL`) {
+        if (!debeConciliar(o, now, ultimo.get(o.id))) continue;
+        ultimo.set(o.id, now);
+        const r = await conciliar(db, pey, o.id);
+        if (!r.ok) log(`polling orden ${o.id}: ${r.error}`);
+      }
+    } catch (e) {
+      log(`polling: ${e?.message}`); // ponytail: H3 elimina este setInterval (se concilia al consultar)
     }
   }, tickMs);
   t.unref?.();

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import sw from 'standardwebhooks';
-import { openDb, crearOrden, entregar, vista, ahora } from '../src/core.js';
+import { nuevaDb } from './helpers/pg.js';
+import { crearOrden, entregar, vista, conciliar, ahora } from '../src/core.js';
 import { manejarWebhook, debeConciliar } from '../src/conciliacion.js';
 import { normalizarTx } from '../src/pey.js';
 const { Webhook } = sw;
@@ -17,7 +18,7 @@ const evento = (qr) => JSON.stringify({ type: 'codi.qr.payment_received', data: 
 const tx = (extra = {}) => ({ id: 'T1', status: 'PAID', amountCents: 1, currency: 'MXN', datePaid: T + 5, ...extra });
 
 async function escenario(txs) {
-  const db = openDb();
+  const { db } = await nuevaDb();
   let lista = txs;
   const pey = { createQr: async () => ({ id: `QR${++n}` }), listQrTransactions: async () => (typeof lista === 'function' ? lista() : lista) };
   const { id, qr } = await crearOrden(db, pey, { concepto: 't', montoCentavos: 1, now: T });
@@ -34,8 +35,8 @@ test('firma ausente, incorrecta o cuerpo alterado: 401 y sin cambio de estado', 
     [cuerpo + ' ', buena],
     [cuerpo, firmar(cuerpo, 'x', new Date(Date.now() - 3600_000))], // timestamp fuera de tolerancia
   ]) assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, c, h), 401);
-  assert.equal(vista(db, id).estado, 'pendiente');
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM eventos').get().n, 0);
+  assert.equal((await vista(db, id)).estado, 'pendiente');
+  assert.equal((await db`SELECT COUNT(*) n FROM eventos`)[0].n, 0);
 });
 
 test('webhook firmado dispara la conciliación y reenvío del mismo evento deja una entrega', async () => {
@@ -43,19 +44,19 @@ test('webhook firmado dispara la conciliación y reenvío del mismo evento deja 
   const cuerpo = evento(qr), h = firmar(cuerpo, 'msg_fijo');
   assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, h), 200);
   assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, h), 200);
-  assert.equal(vista(db, id).estado, 'pagada');
-  assert.equal(entregar(db, id).ok, true);
+  assert.equal((await vista(db, id)).estado, 'pagada');
+  assert.equal((await entregar(db, id)).ok, true);
   assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, h), 200);
-  assert.equal(vista(db, id).entregas, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM eventos').get().n, 1);
+  assert.equal((await vista(db, id)).entregas, 1);
+  assert.equal((await db`SELECT COUNT(*) n FROM eventos`)[0].n, 1);
 });
 
 test('el webhook no basta: si la consulta a pey no muestra el pago, no se habilita nada', async () => {
   const { db, pey, id, qr } = await escenario([]);
   const cuerpo = evento(qr);
   assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, firmar(cuerpo)), 200);
-  assert.equal(vista(db, id).estado, 'pendiente');
-  assert.equal(entregar(db, id).ok, false);
+  assert.equal((await vista(db, id)).estado, 'pendiente');
+  assert.equal((await entregar(db, id)).ok, false);
 });
 
 test('consulta caída: 503 para invitar al reintento y estado intacto', async () => {
@@ -63,38 +64,36 @@ test('consulta caída: 503 para invitar al reintento y estado intacto', async ()
   set(() => { throw new Error('503'); });
   const cuerpo = evento(qr);
   assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, firmar(cuerpo)), 503);
-  assert.equal(vista(db, id).estado, 'pendiente');
+  assert.equal((await vista(db, id)).estado, 'pendiente');
 });
 
 test('firmado de otro QR u otro tipo de evento: 200 sin efecto', async () => {
   const { db, pey, id } = await escenario([tx()]);
   for (const c of [evento('QR-ajeno'), JSON.stringify({ type: 'bank.account.updated', data: {} })])
     assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, c, firmar(c)), 200);
-  assert.equal(vista(db, id).estado, 'pendiente');
+  assert.equal((await vista(db, id)).estado, 'pendiente');
 });
 
 test('webhook ausente: el polling encuentra el pago anterior al vencimiento que aparece después', async () => {
   const { db, pey, id, qr, set } = await escenario([]);
-  const { conciliar } = await import('../src/core.js');
   await conciliar(db, pey, id);
-  assert.equal(vista(db, id).estado, 'pendiente');
+  assert.equal((await vista(db, id)).estado, 'pendiente');
   set([tx({ datePaid: T + 359 })]); // pagó antes de vencer; pey lo muestra tarde
   await conciliar(db, pey, id);
-  assert.equal(vista(db, id, T + 400).estado, 'pagada');
+  assert.equal((await vista(db, id, T + 400)).estado, 'pagada');
 });
 
 test('pago posterior al vencimiento: tardío, sin entrega; segundo pago tras entregar: duplicado, contador 1', async () => {
   const a = await escenario([tx({ datePaid: T + 361 })]);
-  const { conciliar } = await import('../src/core.js');
   await conciliar(a.db, a.pey, a.id);
-  assert.equal(vista(a.db, a.id).tardio, true);
-  assert.equal(entregar(a.db, a.id).ok, false);
+  assert.equal((await vista(a.db, a.id)).tardio, true);
+  assert.equal((await entregar(a.db, a.id)).ok, false);
   const b = await escenario([tx()]);
   await conciliar(b.db, b.pey, b.id);
-  assert.equal(entregar(b.db, b.id).ok, true);
+  assert.equal((await entregar(b.db, b.id)).ok, true);
   b.set([tx(), tx({ id: 'T2', datePaid: T + 20 })]);
   await conciliar(b.db, b.pey, b.id);
-  const v = vista(b.db, b.id);
+  const v = await vista(b.db, b.id);
   assert.equal(v.duplicado, true);
   assert.equal(v.entregas, 1);
 });
