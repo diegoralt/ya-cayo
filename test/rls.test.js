@@ -17,15 +17,17 @@ const app = postgres(APP, opts);
 const admin = postgres(ADMIN, opts);
 after(() => Promise.all([app.end(), admin.end()]));
 
-const TABLAS = ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas'];
+const TABLAS = ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas', 'limites', 'conciliacion_pendiente'];
 const insertar = {
   ordenes: "INSERT INTO ordenes(id, concepto, monto_centavos, creada_en, expira_en) VALUES (1, 'x', 1, 1, 2)",
   transacciones: "INSERT INTO transacciones VALUES ('T', 1, 1, 1, 'valida')",
   registros: "INSERT INTO registros(concepto, monto_centavos, metodo, creada_en) VALUES ('x', 1, 'efectivo', 1)",
   eventos: "INSERT INTO eventos VALUES ('w', 1)",
   entregas: 'INSERT INTO entregas VALUES (1, 1)',
+  limites: "INSERT INTO limites VALUES ('k', 1, 1)",
+  conciliacion_pendiente: 'INSERT INTO conciliacion_pendiente VALUES (1, 1)',
 };
-const COL = { ordenes: 'monto_centavos', transacciones: 'monto_centavos', registros: 'monto_centavos', eventos: 'recibido_en', entregas: 'entregada_en' };
+const COL = { ordenes: 'monto_centavos', transacciones: 'monto_centavos', registros: 'monto_centavos', eventos: 'recibido_en', entregas: 'entregada_en', limites: 'valor', conciliacion_pendiente: 'desde' };
 const ops = (t) => ({
   SELECT: `SELECT * FROM ${t}`,
   INSERT: insertar[t],
@@ -61,7 +63,7 @@ for (const rol of ['anon', 'authenticated']) {
   test(`${rol}: aunque se le diera GRANT por error, RLS (sin política) lo sigue bloqueando con datos reales`, async () => {
     const r = await admin.begin(async (s) => {
       // fixtures como admin (salta RLS) para que «0 filas» signifique bloqueo y no tabla vacía
-      for (const t of ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas']) await s.unsafe(insertar[t]);
+      for (const t of TABLAS) await s.unsafe(insertar[t]);
       const res = {};
       for (const t of TABLAS) {
         assert.equal((await s.unsafe(`SELECT 1 FROM ${t}`)).length, 1, `fixture en ${t}`);
@@ -90,7 +92,7 @@ for (const rol of ['anon', 'authenticated']) {
 
 test('rol del servidor: SELECT/INSERT/UPDATE/DELETE exitosos en todas las tablas', async () => {
   await app.begin(async (s) => {
-    for (const t of ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas']) {
+    for (const t of TABLAS) {
       if (t === 'transacciones') await s.unsafe(insertar.ordenes); // FK (entregas reutiliza la orden 1)
       const q = ops(t);
       const ins = await s.unsafe(q.INSERT);

@@ -118,3 +118,22 @@ test('cabeceras de seguridad en caja, pagador y API', async () => {
   }
   s.cerrar();
 });
+
+test('GET del listado y GET del pagador concilian: un pago sin webhook se confirma al consultar', async () => {
+  const pago = [{ id: 'T1', status: 'PAID', amountCents: 100, currency: 'MXN', datePaid: ahora() + 2 }];
+  const a = await arrancar(pago);
+  const { body: o1 } = await a.crear(1);
+  const lista = (await a.f('/api/ordenes')).body;
+  assert.equal(lista.find((x) => x.id === o1.id).estado, 'pagada'); // listado de la caja
+  a.cerrar();
+  const b = await arrancar(pago);
+  const { body: o2 } = await b.crear(1);
+  const r = await fetch(`http://127.0.0.1:${b.srv.address().port}/api/pago/${o2.token}`); // página del pagador, sin PIN
+  assert.equal((await r.json()).estado, 'pagada');
+  b.cerrar();
+});
+
+test('sin proceso de fondo: el módulo de conciliación ya no programa timers', async () => {
+  const mod = await import('../src/conciliacion.js');
+  assert.equal(mod.iniciarPolling, undefined);
+});

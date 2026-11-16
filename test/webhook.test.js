@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import sw from 'standardwebhooks';
 import { nuevaDb } from './helpers/pg.js';
 import { crearOrden, entregar, vista, conciliar, ahora } from '../src/core.js';
-import { manejarWebhook, debeConciliar } from '../src/conciliacion.js';
+import { manejarWebhook } from '../src/conciliacion.js';
 import { normalizarTx } from '../src/pey.js';
 const { Webhook } = sw;
 
@@ -98,14 +98,29 @@ test('pago posterior al vencimiento: tardío, sin entrega; segundo pago tras ent
   assert.equal(v.entregas, 1);
 });
 
-test('polling: viva cada 5 s, tras vencer cada 60 s hasta 30 min, luego nunca', () => {
-  const o = { qr_id: 'Q', estado: 'pendiente', expira_en: 1000 };
-  assert.equal(debeConciliar(o, 990, 984), true);
-  assert.equal(debeConciliar(o, 990, 987), false);
-  assert.equal(debeConciliar(o, 1100, 1060), false);
-  assert.equal(debeConciliar(o, 1100, 1030), true);
-  assert.equal(debeConciliar({ ...o, estado: 'entregada' }, 1200, 1100), true);
-  assert.equal(debeConciliar(o, 1000 + 1801, 0), false);
+test('recibido vs procesado: un 503 deja el evento sin procesar y el mismo webhook-id se reintenta', async () => {
+  const { db, pey, id, qr, set } = await escenario([]);
+  const cuerpo = evento(qr), h = firmar(cuerpo, 'msg_503');
+  set(() => { throw new Error('503'); });
+  assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, h), 503);
+  const [e] = await db`SELECT recibido_en, procesado_en FROM eventos WHERE webhook_id='msg_503'`;
+  assert.ok(e.recibido_en && e.procesado_en === null);
+  assert.equal((await db`SELECT 1 FROM conciliacion_pendiente WHERE orden_id=${id}`).length, 1); // pendiente durable
+  set([tx()]);
+  assert.equal(await manejarWebhook({ db, pey, secret: SECRETO }, cuerpo, h), 200); // reintento con el mismo id sí procesa
+  assert.equal((await vista(db, id)).estado, 'pagada');
+  assert.ok((await db`SELECT procesado_en FROM eventos WHERE webhook_id='msg_503'`)[0].procesado_en);
+  assert.equal((await db`SELECT 1 FROM conciliacion_pendiente WHERE orden_id=${id}`).length, 0);
+});
+
+test('evento ya procesado: el reenvío responde 200 sin volver a consultar a pey', async () => {
+  const { db, pey, qr } = await escenario([tx()]);
+  let consultas = 0;
+  const contador = { ...pey, listQrTransactions: async (q) => { consultas++; return pey.listQrTransactions(q); } };
+  const cuerpo = evento(qr), h = firmar(cuerpo, 'msg_dup');
+  await manejarWebhook({ db, pey: contador, secret: SECRETO }, cuerpo, h);
+  await manejarWebhook({ db, pey: contador, secret: SECRETO }, cuerpo, h);
+  assert.equal(consultas, 1);
 });
 
 test('normalizarTx convierte pesos a centavos y fechas ISO a Unix', () => {
