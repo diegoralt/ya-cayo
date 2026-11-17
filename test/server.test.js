@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nuevaDb } from './helpers/pg.js';
 import { ahora, crearOrden, vista, contarFallo, devolverIntento } from '../src/core.js';
-import { crearServidor } from '../src/server.js';
+import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { crearServidor, crearHandler } from '../src/server.js';
 
 const PIN = '1234';
 async function arrancar(txs = [], { db: dada, ...opc } = {}) {
@@ -255,4 +257,19 @@ test('PIN en Vercel: el límite es por IP de la cabecera de Vercel, no global', 
   assert.equal((await s.f('/api/metricas', { headers: h('1.1.1.1') })).status, 429);
   assert.equal((await s.f('/api/metricas', { headers: h('2.2.2.2') })).status, 200);
   s.cerrar();
+});
+
+test('crearHandler funciona sin servidor propio (como en Vercel) y no sirve páginas; vercel.json las enruta', async () => {
+  const { db } = await nuevaDb();
+  const srv = createServer(crearHandler({ db, pey: {}, secret: 'x', pin: PIN }));
+  await new Promise((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  assert.equal((await fetch(b + '/health')).status, 200);
+  assert.equal((await fetch(b + '/api/ordenes')).status, 401);
+  assert.equal((await fetch(b + '/')).status, 404); // las páginas son estáticas en Vercel
+  srv.close();
+  const v = JSON.parse(readFileSync('vercel.json', 'utf8'));
+  const destino = Object.fromEntries(v.rewrites.map((r) => [r.source, r.destination]));
+  assert.deepEqual(destino, { '/': '/caja.html', '/pagar/:token': '/pagar.html', '/api/:path*': '/api/index', '/webhook': '/api/index', '/health': '/api/index' });
+  assert.ok(v.headers[0].headers.some((h) => h.key === 'content-security-policy'));
 });
