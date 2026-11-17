@@ -1,9 +1,9 @@
-// Entrada de Vercel: una sola función para /api/*, /webhook y /health (ver vercel.json).
-import { abrirDb } from '../src/core.js';
-import { crearHandler } from '../src/server.js';
-import { crearClientePey } from '../src/pey.js';
+// Vercel entry: a single function for /api/*, /webhook and /health (see vercel.json).
+import { openDb } from '../src/core.js';
+import { createHandler } from '../src/server.js';
+import { createPeyClient } from '../src/pey.js';
 
-const { PEY_WEBHOOK_SECRET: secret, DEMO_PIN: pin, DATABASE_URL, TITULAR, COMISION_TARJETA } = process.env;
-if (!secret || !pin || !DATABASE_URL) throw new Error('faltan PEY_WEBHOOK_SECRET, DEMO_PIN o DATABASE_URL');
+const { PEY_WEBHOOK_SECRET: secret, DEMO_PIN: pin, DATABASE_URL, HOLDER_NAME, CARD_FEE_RATE } = process.env;
+if (!secret || !pin || !DATABASE_URL) throw new Error('missing PEY_WEBHOOK_SECRET, DEMO_PIN or DATABASE_URL');
 
-export default crearHandler({ db: abrirDb(DATABASE_URL), pey: crearClientePey(), secret, pin, titular: TITULAR || undefined, comision: Number(COMISION_TARJETA ?? 0.03) });
+export default createHandler({ db: openDb(DATABASE_URL), pey: createPeyClient(), secret, pin, holder: HOLDER_NAME || undefined, fee: Number(CARD_FEE_RATE ?? 0.03) });

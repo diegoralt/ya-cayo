@@ -1,12 +1,13 @@
--- Esquema inicial de Ya Cayó (las cinco tablas de src/core.js) con RLS activo y grants explícitos.
--- Aditiva: solo CREATE. Requiere que el rol del servidor `ya_cayo_app` exista (sin SUPERUSER ni BYPASSRLS):
---   local: lo crea scripts/pg-test.sh · Supabase: créalo a mano con contraseña propia antes de aplicar.
--- Tiempos en segundos Unix (bigint), igual que SQLite. Ids con `by default` para conservarlos al migrar (H8).
+-- Initial schema of Ya Cayó (the five tables of src/core.js) with RLS enabled and explicit grants.
+-- Additive: CREATE only. Requires the server role `ya_cayo_app` to exist (no SUPERUSER or BYPASSRLS):
+--   local: created by scripts/pg-test.sh · Supabase: create it by hand with its own password before applying.
+-- Times in Unix seconds (bigint), same as SQLite. Ids use `by default` so they can be preserved when migrating (H8).
+-- Names are the original Spanish ones; 20261117000000_english_names.sql renames them (see its dictionary).
 
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ya_cayo_app') THEN
-    RAISE EXCEPTION 'falta el rol ya_cayo_app: créalo antes de migrar';
+    RAISE EXCEPTION 'missing role ya_cayo_app: create it before migrating';
   END IF;
 END $$;
 
@@ -52,7 +53,7 @@ CREATE TABLE public.entregas (
   entregada_en bigint NOT NULL
 );
 
--- RLS + grants: nadie salvo ya_cayo_app. REVOKE explícito porque Supabase da ALL a anon/authenticated por defecto.
+-- RLS + grants: nobody except ya_cayo_app. Explicit REVOKE because Supabase gives ALL to anon/authenticated by default.
 DO $$
 DECLARE t text;
 BEGIN

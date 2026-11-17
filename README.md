@@ -32,10 +32,10 @@ Requiere Node ≥ 24. `cp .env.example .env`, completa las variables y corre `np
 | `PEY_API_KEY` | sí | API key de **tu** cuenta de pey (portal → Desarrollador). Va como `Bearer` a `https://api.pey.mx`. |
 | `PEY_WEBHOOK_SECRET` | sí | Secreto de firma del webhook que muestra el portal al crear el webhook (rotable). |
 | `DEMO_PIN` | sí | PIN para entrar a la caja; elige el tuyo en tu instancia. |
-| `TITULAR` | no | Nombre del titular de la cuenta que cobra; se muestra al pagador. |
+| `HOLDER_NAME` | no | Nombre del titular de la cuenta que cobra; se muestra al pagador. |
 | `PORT` | no | Puerto (default `8787`). |
 | `DB_PATH` | no | Archivo SQLite (default `./ya-cayo.sqlite`). |
-| `COMISION_TARJETA` | no | Supuesto de comisión de tarjeta para la recomendación de bono (default `0.03`). |
+| `CARD_FEE_RATE` | no | Supuesto de comisión de tarjeta para la recomendación de bono (default `0.03`). |
 
 Nunca subas `.env`: está ignorado por git. Cada comercio usa su propia cuenta y API key.
 

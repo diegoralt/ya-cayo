@@ -15,7 +15,7 @@ hallazgo() { echo "HALLAZGO: $1"; HALLAZGOS=$((HALLAZGOS + 1)); }
 error() { echo "ERROR: $1"; ERRORES=$((ERRORES + 1)); }
 
 PATRON='whsec_[A-Za-z0-9+/=]{8,}|Bearer [A-Za-z0-9._~+/=-]{16,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|TunnelSecret|-----BEGIN [A-Z ]*PRIVATE KEY-----|(api[_-]?key|secret|token|passw(or)?d)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9+/_=-]{12,}["'"'"']|^\+?[A-Z_]*(KEY|SECRET|TOKEN|PIN)[A-Z_]*=[^[:space:]]{6,}'
-# Claves de .env cuyo VALOR es sensible (PORT, DB_PATH, TITULAR, COMISION_TARJETA no lo son).
+# Claves de .env cuyo VALOR es sensible (PORT, DB_PATH, HOLDER_NAME, CARD_FEE_RATE no lo son).
 CLAVES_SECRETAS='KEY|SECRET|TOKEN|PIN|PASS|CREDENTIAL'
 
 # 1) Lista de archivos: versionados + sin versionar que no estén ignorados.
@@ -62,7 +62,7 @@ done
 # 6) Respuestas de la URL pública (éxito y error), si se pasó.
 if [ "${1:-}" != "" ]; then
   URL=${1%/}
-  for ruta in / /health /pagar/x /api/pago/x /api/ordenes /api/metricas /webhook /.env /package.json /ya-cayo.sqlite /nada; do
+  for ruta in / /health /pagar/x /api/payment/x /api/orders /api/metrics /webhook /.env /package.json /ya-cayo.sqlite /nada; do
     codigo=$(curl -sS -m 15 -o "$TMP/resp" -w '%{http_code}' "$URL$ruta" 2>/dev/null) || { error "no pude consultar $URL$ruta"; continue; }
     grep -IqE "$PATRON" "$TMP/resp" 2>/dev/null && hallazgo "patrón de secreto en la respuesta de $ruta ($codigo)"
     while IFS= read -r linea; do

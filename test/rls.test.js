@@ -1,5 +1,5 @@
-// RLS y grants: anon/authenticated no pueden nada; el rol del servidor (no superusuario) sí.
-// Falla cerrado: sin DATABASE_URL_TEST (o .pg-test.env de scripts/pg-test.sh) no corre; nunca usa DATABASE_URL.
+// RLS and grants: anon/authenticated can do nothing; the server role (non-superuser) can.
+// Fails closed: without DATABASE_URL_TEST (or .pg-test.env from scripts/pg-test.sh) it does not run; it never uses DATABASE_URL.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -7,9 +7,9 @@ import postgres from 'postgres';
 
 if (!process.env.DATABASE_URL_TEST && existsSync('.pg-test.env')) process.loadEnvFile('.pg-test.env');
 const { DATABASE_URL_TEST: APP, DATABASE_URL_TEST_ADMIN: ADMIN } = process.env;
-assert.ok(APP && ADMIN, 'falta DATABASE_URL_TEST(_ADMIN): corre `sh scripts/pg-test.sh` (Docker arrancado)');
+assert.ok(APP && ADMIN, 'missing DATABASE_URL_TEST(_ADMIN): run `sh scripts/pg-test.sh` (Docker running)');
 for (const u of [APP, ADMIN]) {
-  assert.ok(['127.0.0.1', 'localhost'].includes(new URL(u).hostname), 'las pruebas solo corren contra Postgres local');
+  assert.ok(['127.0.0.1', 'localhost'].includes(new URL(u).hostname), 'tests only run against local Postgres');
 }
 
 const opts = { max: 1, onnotice: () => {}, connect_timeout: 5 };
@@ -17,60 +17,60 @@ const app = postgres(APP, opts);
 const admin = postgres(ADMIN, opts);
 after(() => Promise.all([app.end(), admin.end()]));
 
-const TABLAS = ['ordenes', 'transacciones', 'registros', 'eventos', 'entregas', 'limites', 'conciliacion_pendiente'];
-const insertar = {
-  ordenes: "INSERT INTO ordenes(id, concepto, monto_centavos, creada_en, expira_en) VALUES (1, 'x', 1, 1, 2)",
-  transacciones: "INSERT INTO transacciones VALUES ('T', 1, 1, 1, 'valida')",
-  registros: "INSERT INTO registros(concepto, monto_centavos, metodo, creada_en) VALUES ('x', 1, 'efectivo', 1)",
-  eventos: "INSERT INTO eventos VALUES ('w', 1)",
-  entregas: 'INSERT INTO entregas VALUES (1, 1)',
-  limites: "INSERT INTO limites VALUES ('k', 1, 1)",
-  conciliacion_pendiente: 'INSERT INTO conciliacion_pendiente VALUES (1, 1)',
+const TABLES = ['orders', 'transactions', 'records', 'events', 'deliveries', 'limits', 'pending_reconciliation'];
+const inserts = {
+  orders: "INSERT INTO orders(id, concept, amount_cents, created_at, expires_at) VALUES (1, 'x', 1, 1, 2)",
+  transactions: "INSERT INTO transactions VALUES ('T', 1, 1, 1, 'valid')",
+  records: "INSERT INTO records(concept, amount_cents, method, created_at) VALUES ('x', 1, 'cash', 1)",
+  events: "INSERT INTO events VALUES ('w', 1)",
+  deliveries: 'INSERT INTO deliveries VALUES (1, 1)',
+  limits: "INSERT INTO limits VALUES ('k', 1, 1)",
+  pending_reconciliation: 'INSERT INTO pending_reconciliation VALUES (1, 1)',
 };
-const COL = { ordenes: 'monto_centavos', transacciones: 'monto_centavos', registros: 'monto_centavos', eventos: 'recibido_en', entregas: 'entregada_en', limites: 'valor', conciliacion_pendiente: 'desde' };
+const COL = { orders: 'amount_cents', transactions: 'amount_cents', records: 'amount_cents', events: 'received_at', deliveries: 'delivered_at', limits: 'value', pending_reconciliation: 'since' };
 const ops = (t) => ({
   SELECT: `SELECT * FROM ${t}`,
-  INSERT: insertar[t],
+  INSERT: inserts[t],
   UPDATE: `UPDATE ${t} SET ${COL[t]} = 1`,
   DELETE: `DELETE FROM ${t}`,
 });
-// Ejecuta como `rol` (SET ROLE desde el admin) dentro de una transacción que siempre se revierte.
-const como = (rol, q) =>
+// Runs as `role` (SET ROLE from the admin) inside a transaction that is always rolled back.
+const asRole = (role, q) =>
   admin.begin(async (s) => {
-    await s.unsafe(`SET LOCAL ROLE ${rol}`);
+    await s.unsafe(`SET LOCAL ROLE ${role}`);
     await s.unsafe(q);
     throw new Error('rollback');
   }).catch((e) => e);
 
-test('el rol del servidor no es superusuario ni salta RLS; las tablas tienen RLS activo', async () => {
+test('the server role is not a superuser and does not bypass RLS; the tables have RLS enabled', async () => {
   const [r] = await app`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
   assert.deepEqual(r, { rolsuper: false, rolbypassrls: false });
-  const rows = await app`SELECT relname, relrowsecurity FROM pg_class WHERE relname = ANY(${TABLAS}) AND relkind = 'r'`;
-  assert.equal(rows.length, TABLAS.length);
-  assert.ok(rows.every((x) => x.relrowsecurity), 'RLS activo en todas');
+  const rows = await app`SELECT relname, relrowsecurity FROM pg_class WHERE relname = ANY(${TABLES}) AND relkind = 'r'`;
+  assert.equal(rows.length, TABLES.length);
+  assert.ok(rows.every((x) => x.relrowsecurity), 'RLS enabled on all');
 });
 
-for (const rol of ['anon', 'authenticated']) {
-  test(`${rol}: SELECT/INSERT/UPDATE/DELETE denegados en todas las tablas (grants revocados)`, async () => {
-    for (const t of TABLAS) {
+for (const role of ['anon', 'authenticated']) {
+  test(`${role}: SELECT/INSERT/UPDATE/DELETE denied on all tables (grants revoked)`, async () => {
+    for (const t of TABLES) {
       for (const [op, q] of Object.entries(ops(t))) {
-        const e = await como(rol, q);
-        assert.equal(e.code, '42501', `${rol} ${op} ${t}: esperaba permission denied, obtuvo ${e.message}`);
+        const e = await asRole(role, q);
+        assert.equal(e.code, '42501', `${role} ${op} ${t}: esperaba permission denied, obtuvo ${e.message}`);
       }
     }
   });
 
-  test(`${rol}: aunque se le diera GRANT por error, RLS (sin política) lo sigue bloqueando con datos reales`, async () => {
+  test(`${role}: even if GRANT were given by mistake, RLS (no policy) still blocks it with real data`, async () => {
     const r = await admin.begin(async (s) => {
-      // fixtures como admin (salta RLS) para que «0 filas» signifique bloqueo y no tabla vacía
-      for (const t of TABLAS) await s.unsafe(insertar[t]);
+      // fixtures as admin (bypasses RLS) so «0 rows» means blocked and not an empty table
+      for (const t of TABLES) await s.unsafe(inserts[t]);
       const res = {};
-      for (const t of TABLAS) {
+      for (const t of TABLES) {
         assert.equal((await s.unsafe(`SELECT 1 FROM ${t}`)).length, 1, `fixture en ${t}`);
-        await s.unsafe(`GRANT ALL ON ${t} TO ${rol}`);
+        await s.unsafe(`GRANT ALL ON ${t} TO ${role}`);
       }
-      await s.unsafe(`SET LOCAL ROLE ${rol}`);
-      for (const t of TABLAS) {
+      await s.unsafe(`SET LOCAL ROLE ${role}`);
+      for (const t of TABLES) {
         const q = ops(t);
         res[t] = {
           select: (await s.unsafe(q.SELECT)).length,
@@ -80,20 +80,20 @@ for (const rol of ['anon', 'authenticated']) {
         };
       }
       await s.unsafe('RESET ROLE');
-      for (const t of TABLAS) res[t].siguen = (await s.unsafe(`SELECT 1 FROM ${t}`)).length;
+      for (const t of TABLES) res[t].siguen = (await s.unsafe(`SELECT 1 FROM ${t}`)).length;
       throw Object.assign(new Error('rollback'), { res });
     }).catch((e) => e);
     assert.ok(r.res, r.message);
-    for (const t of TABLAS) {
-      assert.deepEqual(r.res[t], { select: 0, update: 0, delete: 0, insert: '42501', siguen: 1 }, `${rol} sobre ${t}`);
+    for (const t of TABLES) {
+      assert.deepEqual(r.res[t], { select: 0, update: 0, delete: 0, insert: '42501', siguen: 1 }, `${role} sobre ${t}`);
     }
   });
 }
 
-test('rol del servidor: SELECT/INSERT/UPDATE/DELETE exitosos en todas las tablas', async () => {
+test('server role: SELECT/INSERT/UPDATE/DELETE succeed on all tables', async () => {
   await app.begin(async (s) => {
-    for (const t of TABLAS) {
-      if (t === 'transacciones') await s.unsafe(insertar.ordenes); // FK (entregas reutiliza la orden 1)
+    for (const t of TABLES) {
+      if (t === 'transactions') await s.unsafe(inserts.orders); // FK (deliveries reuses order 1)
       const q = ops(t);
       const ins = await s.unsafe(q.INSERT);
       assert.equal(ins.count, 1, `INSERT ${t}`);
@@ -101,9 +101,9 @@ test('rol del servidor: SELECT/INSERT/UPDATE/DELETE exitosos en todas las tablas
       assert.ok((await s.unsafe(q.UPDATE)).count >= 1, `UPDATE ${t}`);
       assert.ok((await s.unsafe(q.DELETE)).count >= 1, `DELETE ${t}`);
     }
-    // identidades: el servidor puede usar las secuencias (la orden 1 explícita no avanza la secuencia: se borra antes)
-    await s`DELETE FROM ordenes`;
-    await s`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en) VALUES ('y', 1, 1, 2)`;
-    throw new Error('rollback'); // no deja datos
+    // identities: the server can use the sequences (the explicit order 1 does not advance the sequence: it is deleted first)
+    await s`DELETE FROM orders`;
+    await s`INSERT INTO orders(concept, amount_cents, created_at, expires_at) VALUES ('y', 1, 1, 2)`;
+    throw new Error('rollback'); // leaves no data
   }).catch((e) => assert.equal(e.message, 'rollback', e.message));
 });
