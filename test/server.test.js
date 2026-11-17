@@ -5,15 +5,15 @@ import { ahora, crearOrden, vista } from '../src/core.js';
 import { crearServidor } from '../src/server.js';
 
 const PIN = '1234';
-async function arrancar(txs = []) {
-  const { db } = await nuevaDb();
+async function arrancar(txs = [], { db: dada, ...opc } = {}) {
+  const db = dada ?? (await nuevaDb()).db;
   let n = 0;
   const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async (qrId) => (typeof txs === 'function' ? txs(qrId) : txs) };
-  const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba' });
+  const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba', ...opc });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
-  const f = async (ruta, { pin = PIN, ...init } = {}) => {
-    const r = await fetch(base + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json' } });
+  const f = async (ruta, { pin = PIN, headers = {}, ...init } = {}) => {
+    const r = await fetch(base + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json', ...headers } });
     return { status: r.status, body: await r.json().catch(() => null) };
   };
   const crear = (monto = 0.01, extra = {}) => f('/api/ordenes', { method: 'POST', body: JSON.stringify({ concepto: 't', monto, ...extra }) });
@@ -163,11 +163,13 @@ test('reintento del mismo intento por HTTP: misma orden y mismo QR, sin duplicar
   s.cerrar();
 });
 
-test('reintento de un intento atascado (sin qr_id) con el tope lleno: 409, no crea un cuarto QR vivo', async () => {
+test('intento atascado (sin qr_id): cuenta como cobro vivo y su reintento se completa sin superar el tope', async () => {
   const s = await arrancar();
   await db_atascado(s.db);
-  for (const i of ['v-intento-1', 'v-intento-2', 'v-intento-3']) await s.crear(1, { intento: i });
-  assert.equal((await s.crear(1, { intento: 'atascado-1' })).status, 409);
+  for (const i of ['v-intento-1', 'v-intento-2']) assert.equal((await s.crear(1, { intento: i })).status, 201);
+  assert.equal((await s.crear(1, { intento: 'v-intento-3' })).status, 409); // 2 + el atascado = 3
+  await s.db`UPDATE ordenes SET creando_desde = creando_desde - 100 WHERE intento='atascado-1'`; // pasado el plazo de relevo
+  assert.equal((await s.crear(1, { intento: 'atascado-1' })).status, 201);
   assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
   s.cerrar();
 });
@@ -175,3 +177,33 @@ async function db_atascado(db) {
   const t = ahora();
   await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 100}, ${t + 260}, 'tok-atascado', 'atascado-1', ${t - 100})`;
 }
+
+test('4 POST simultáneos con intentos distintos: a lo sumo 3 vivos (cupo atómico en la BD)', async () => {
+  const s = await arrancar();
+  const r = await Promise.all([1, 2, 3, 4].map((i) => s.crear(1, { intento: `simultaneo-${i}` })));
+  assert.deepEqual(r.map((x) => x.status).sort(), [201, 201, 201, 409]);
+  assert.equal((await s.f('/api/ordenes')).body.length, 3);
+  s.cerrar();
+});
+
+test('PIN: el contador vive en la BD; dos instancias lo comparten y una cabecera falsa no evade el límite', async () => {
+  const { db, abrir } = await nuevaDb();
+  const a = await arrancar([], { db }), b = await arrancar([], { db: abrir() });
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await a.f('/api/metricas', { pin: 'mal', headers: { 'x-vercel-forwarded-for': `9.9.9.${i}` } })).status, 401);
+    assert.equal((await b.f('/api/metricas', { pin: 'mal', headers: { 'x-forwarded-for': `8.8.8.${i}` } })).status, 401);
+  }
+  const r = await b.f('/api/metricas'); // enVercel=false: la cabecera se ignora y es la misma IP
+  assert.equal(r.status, 429);
+  assert.equal((await a.f('/api/metricas')).status, 429);
+  a.cerrar(); b.cerrar();
+});
+
+test('PIN en Vercel: el límite es por IP de la cabecera de Vercel, no global', async () => {
+  const s = await arrancar([], { enVercel: true });
+  const h = (ip) => ({ 'x-vercel-forwarded-for': ip });
+  for (let i = 0; i < 10; i++) await s.f('/api/metricas', { pin: 'mal', headers: h('1.1.1.1') });
+  assert.equal((await s.f('/api/metricas', { headers: h('1.1.1.1') })).status, 429);
+  assert.equal((await s.f('/api/metricas', { headers: h('2.2.2.2') })).status, 200);
+  s.cerrar();
+});

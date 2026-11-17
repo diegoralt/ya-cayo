@@ -1,14 +1,14 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
-import { abrirDb, crearOrden, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
+import { abrirDb, crearOrden, entregar, vista, contarFallo, fallosPin, ahora, registrarOtroMetodo, metricas } from './core.js';
 import { manejarWebhook, conciliarAlConsultar, conciliarMarcando, VENTANA_POST } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
 
 const MAX_CUERPO = 64 * 1024;
 export const TOPE_CENTAVOS = 5000; // demo: máx. $50
 export const MAX_VIVOS = 3;
-const MAX_FALLOS = 10, VENTANA_MS = 60_000; // PIN: 10 fallos por minuto y por IP
+const MAX_FALLOS = 10, VENTANA_S = 60; // PIN: 10 fallos por minuto y por IP (contador en la BD, compartido entre instancias)
 // ponytail: solo estas dos páginas se sirven; nunca el directorio del repo ni la base.
 const pagina = (n) => readFileSync(new URL(`../public/${n}`, import.meta.url));
 
@@ -20,7 +20,6 @@ const SEGURIDAD = {
   'cache-control': 'no-store',
   'content-security-policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
-const esLoopback = (a = '') => /^(::1|127\.|::ffff:127\.)/.test(a);
 
 const json = (res, codigo, obj) => res.writeHead(codigo, { 'content-type': 'application/json' }).end(JSON.stringify(obj));
 const iguales = (a = '', b = '') => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -45,8 +44,7 @@ function vistaPublica(v, titular) {
 }
 const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacciones.length });
 
-export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03 }) {
-  const fallos = new Map(); // ponytail: en memoria, una instancia; sin limpieza (pocas IPs). Con varios procesos, pasar a Redis.
+export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03, enVercel = !!process.env.VERCEL }) {
   const srv = createServer(async (req, res) => {
     for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v);
     try {
@@ -71,12 +69,11 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!ruta.startsWith('/api/')) return res.writeHead(404).end();
 
       // Caja: todo lo demás exige el PIN de demo.
-      // cf-connecting-ip solo se confía si la conexión viene del túnel local; directo desde la red, no se puede falsificar.
-      const ip = (esLoopback(req.socket.remoteAddress) && req.headers['cf-connecting-ip']) || req.socket.remoteAddress, ahora = Date.now();
-      let f = fallos.get(ip);
-      if (!f || f.hasta <= ahora) fallos.set(ip, (f = { n: 0, hasta: ahora + VENTANA_MS }));
-      if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.ceil((f.hasta - ahora) / 1000) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
-      if (!iguales(req.headers['x-pin'], pin)) { f.n++; return json(res, 401, { error: 'PIN incorrecto' }); }
+      // La IP solo se toma de la cabecera que Vercel sobrescribe; fuera de Vercel cualquier cabecera es falsificable: se usa el socket.
+      const ip = (enVercel && req.headers['x-vercel-forwarded-for']?.split(',')[0].trim()) || req.socket.remoteAddress, ahora_ = ahora();
+      const f = await fallosPin(db, ip, ahora_);
+      if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.hasta - ahora_) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
+      if (!iguales(req.headers['x-pin'], pin)) { await contarFallo(db, ip, VENTANA_S, ahora_); return json(res, 401, { error: 'PIN incorrecto' }); }
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
         // Candidatas a conciliar: toda orden dentro de la ventana, no solo las 20 que se muestran.
@@ -93,9 +90,8 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         if (centavos > TOPE_CENTAVOS) return json(res, 400, { error: 'tope de la demo: $50' });
         if (b.metodo === 'otro') { await registrarOtroMetodo(db, concepto, centavos); return json(res, 201, { registrado: true }); }
         const intento = /^[\w-]{8,64}$/.test(b.intento ?? '') ? b.intento : randomUUID(); // clave estable del cobro: el reintento no duplica el QR
-        const previa = (await db`SELECT 1 FROM ordenes WHERE intento=${intento} AND qr_id IS NOT NULL`).length > 0; // solo se exime al reintento que ya tiene QR; el atascado (sin qr_id) volverá a crear uno y debe pasar el tope
-        if (!previa && (await cobrosVivos(db)) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
-        const r = await crearOrden(db, pey, { concepto, montoCentavos: centavos, intento }); // el monto lo fija el servidor en el QR
+        const r = await crearOrden(db, pey, { concepto, montoCentavos: centavos, intento, maxVivos: MAX_VIVOS }); // el monto lo fija el servidor en el QR
+        if (r.lleno) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
         if (r.creando) return json(res, 409, { error: 'el cobro se está creando; vuelve a pulsar Cobrar en unos segundos' });
         return json(res, 201, vistaCaja(await vista(db, r.id)));
       }

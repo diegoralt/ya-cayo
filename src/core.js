@@ -23,10 +23,18 @@ const qrDe = (o) => ({ id: o.qr_id, qrString: o.qr_string, qrImage: o.qr_image }
 // inalcanzable (nadie lo vio ni se puede consultar), así que recrear es seguro. El guardado es «gana el primero».
 // pey: { createQr({amountCents, concept, expiration, numRef, metadata}) -> {id,qrString,qrImage}, listQrTransactions(qrId) -> [{id,status,amountCents,currency,datePaid}] }
 // Devuelve { id, qr } (nuevo o ya existente: reutilizada) o { id, creando: true } si otro lo está creando.
-export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, now = ahora(), intento = randomUUID() }) {
+export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, now = ahora(), intento = randomUUID(), maxVivos }) {
   let id, c = concepto, m = montoCentavos;
-  const [nueva] = await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde)
-    VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${intento}, ${now}) ON CONFLICT (intento) DO NOTHING RETURNING id`;
+  // Cupo atómico: la fila 'cupo' de limites serializa cuenta + alta; un intento ya existente no consume cupo (el atascado ya cuenta como vivo: cobrosVivos incluye los «creando»).
+  const nueva = await db.begin(async (t) => {
+    if (maxVivos) {
+      await t`INSERT INTO limites(clave, valor, vence_en) VALUES ('cupo', 0, 0) ON CONFLICT (clave) DO UPDATE SET valor=limites.valor`;
+      if (!(await t`SELECT 1 FROM ordenes WHERE intento=${intento}`).length && (await cobrosVivos(t, now)) >= maxVivos) return 'lleno';
+    }
+    return (await t`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde)
+      VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${intento}, ${now}) ON CONFLICT (intento) DO NOTHING RETURNING id`)[0];
+  });
+  if (nueva === 'lleno') return { lleno: true };
   if (nueva) id = nueva.id;
   else {
     const [o] = await db`SELECT id, concepto, monto_centavos, qr_id, qr_string, qr_image FROM ordenes WHERE intento=${intento}`;
@@ -132,6 +140,19 @@ export async function marcarProcesado(db, webhookId, now = ahora()) {
   await db`UPDATE eventos SET procesado_en=${now} WHERE webhook_id=${webhookId} AND procesado_en IS NULL`;
 }
 
+// PIN por IP: n fallos por ventana en limites. Un solo upsert atómico; devuelve cuántos van y cuándo vence la ventana.
+export async function contarFallo(db, ip, ventana, now = ahora()) {
+  const [r] = await db`INSERT INTO limites(clave, valor, vence_en) VALUES (${`pin:${ip}`}, 1, ${now + ventana})
+    ON CONFLICT (clave) DO UPDATE SET valor = CASE WHEN limites.vence_en <= ${now} THEN 1 ELSE limites.valor + 1 END,
+      vence_en = CASE WHEN limites.vence_en <= ${now} THEN ${now + ventana} ELSE limites.vence_en END
+    RETURNING valor, vence_en`;
+  return { n: Number(r.valor), hasta: Number(r.vence_en) };
+}
+export async function fallosPin(db, ip, now = ahora()) {
+  const [r] = await db`SELECT valor, vence_en FROM limites WHERE clave=${`pin:${ip}`} AND vence_en>${now}`;
+  return r ? { n: Number(r.valor), hasta: Number(r.vence_en) } : { n: 0, hasta: 0 };
+}
+
 // Reserva atómica con vencimiento: true solo para quien la toma (la fila bloquea a los demás hasta `vence_en`).
 export async function reservar(db, clave, ttl, now = ahora()) {
   return (await db`INSERT INTO limites(clave, valor, vence_en) VALUES (${clave}, 1, ${now + ttl})
@@ -144,7 +165,7 @@ export async function registrarOtroMetodo(db, concepto, montoCentavos, now = aho
 }
 
 export async function cobrosVivos(db, now = ahora()) {
-  return (await db`SELECT COUNT(*) AS n FROM ordenes WHERE estado='pendiente' AND expira_en>=${now} AND qr_id IS NOT NULL`)[0].n;
+  return (await db`SELECT COUNT(*) AS n FROM ordenes WHERE estado='pendiente' AND expira_en>=${now}`)[0].n // incluye los que están «creando»;
 }
 
 // Métricas «después» que salen del servidor. Clics y cambios de app no se miden aquí (ver docs).
