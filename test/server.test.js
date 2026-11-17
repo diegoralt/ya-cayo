@@ -148,3 +148,17 @@ test('sin proceso de fondo: el módulo de conciliación ya no programa timers', 
   const mod = await import('../src/conciliacion.js');
   assert.equal(mod.iniciarPolling, undefined);
 });
+
+test('reintento del mismo intento por HTTP: misma orden y mismo QR, sin duplicar ni contar otro cobro vivo', async () => {
+  const s = await arrancar();
+  const a = await s.crear(1, { intento: 'intento-http-1' });
+  const b = await s.crear(1, { intento: 'intento-http-1' });
+  assert.equal(a.status, 201);
+  assert.equal(b.body.id, a.body.id);
+  assert.equal(b.body.qr_id, a.body.qr_id);
+  assert.equal((await s.f('/api/ordenes')).body.length, 1);
+  for (const i of ['x-intento-2', 'x-intento-3']) await s.crear(1, { intento: i });
+  assert.equal((await s.crear(1, { intento: 'intento-http-1' })).body.id, a.body.id); // con 3 vivos, el reintento no es rechazado
+  assert.equal((await s.crear(1, { intento: 'otro-intento-4' })).status, 409);
+  s.cerrar();
+});

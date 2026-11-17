@@ -37,8 +37,27 @@ export async function manejarWebhook({ db, pey, secret }, cuerpoCrudo, cabeceras
   const d = ev?.data ?? ev ?? {};
   const qrId = d.codiQrId;
   if (ev?.type !== 'codi.qr.payment_received' || qrId == null) { await marcarProcesado(db, id); return 200; } // evento ajeno: firmado y ya
-  const [o] = await db`SELECT id FROM ordenes WHERE qr_id=${String(qrId)}`;
-  if (!o) return 200; // sin orden (aún): queda recibido sin procesar; H4 lo concilia al enlazar el qr_id
+  let [o] = await db`SELECT id FROM ordenes WHERE qr_id=${String(qrId)}`;
+  if (!o) {
+    // Sin orden con ese QR: la correlación es nuestra, por metadata.intento (pey la devuelve en el evento).
+    let md = d.metadata; if (typeof md === 'string') { try { md = JSON.parse(md); } catch { md = null; } }
+    const intento = md?.intento;
+    if (!intento) return 200; // sin orden (aún): queda recibido sin procesar; la conciliación al consultar lo cubre
+    const [p] = await db`SELECT id, qr_id FROM ordenes WHERE intento=${String(intento)}`;
+    if (!p) return 200;
+    if (p.qr_id == null) {
+      // función cortada tras aceptar pey, o evento adelantado al guardado del qr_id: se adopta el QR y se concilia
+      const [a] = await db`UPDATE ordenes SET qr_id=${String(qrId)}, creando_desde=NULL WHERE id=${p.id} AND qr_id IS NULL RETURNING id`;
+      if (a) o = a; else [o] = await db`SELECT id FROM ordenes WHERE qr_id=${String(qrId)}`;
+      if (!o) return 503; // otro guardó un QR distinto entre medias: que pey reintente y caiga en el caso siguiente
+    } else {
+      // pago a un QR que ya no es el vigente de la orden: se registra, sin entrega; revisión manual
+      await db`INSERT INTO transacciones(transaction_id, orden_id, monto_centavos, date_paid, clasificacion)
+        VALUES (${String(d.transactionId)}, ${p.id}, ${Math.round(Number(d.amount) * 100)}, ${d.datePaid ?? null}, 'invalida') ON CONFLICT DO NOTHING`;
+      await marcarProcesado(db, id);
+      return 200;
+    }
+  }
   const r = await conciliarMarcando(db, pey, o.id);
   if (!r.ok) return 503; // 503 invita al reintento (sigue sin procesar); la conciliación al consultar también lo cubre
   await marcarProcesado(db, id);
