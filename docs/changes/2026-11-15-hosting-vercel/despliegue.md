@@ -34,5 +34,5 @@ Por el puerto 6543 con `max: 1`, varias consultas simultáneas en la misma conex
 - **Secretos:** ningún valor de `preview.env` aparece en el árbol ni en el historial de git (escaneo por valor). `supabase/.temp`, `.vercel` y `.env.local` quedan ignorados.
 
 ## Pendiente de H7
-- [ ] Arranque en frío tras ≥10 min de inactividad (medición en curso; ver abajo).
-- [ ] Aprobación de Diego de la compuerta de producción.
+- [x] Arranque en frío: tras 12 min de inactividad, `/health` 0,80 s y `/api/orders` 0,51 s a la primera; 0,38 s y 0,29 s a la segunda. Tras pocos minutos: 1,05 s la primera `/health`. El coste del frío es ≲ 0,5 s sobre el caliente.
+- [x] Aprobación de Diego de la compuerta de H7 (17-nov-2026), con la evidencia de este archivo.
