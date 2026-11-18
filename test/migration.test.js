@@ -2,12 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newDb } from './helpers/pg.js';
 import { countDeliveries, deliver } from '../src/core.js';
-import { readSqlite, importToPg, verify, ensayo } from '../scripts/migrar-sqlite-a-pg.js';
+import { readSqlite, importToPg, verify, ensayo, checkTarget, loadSource, PROD_REF } from '../scripts/migrar-sqlite-a-pg.js';
 
 const OLD_DDL = `
   CREATE TABLE ordenes (id INTEGER PRIMARY KEY, concepto TEXT NOT NULL, monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
@@ -105,4 +106,19 @@ test('ensayo(): the full rehearsal passes on the fixture, leaves the source unto
   assert.equal(logs.filter((l) => l.startsWith('ok')).length, 7);
   writeFileSync(`${path}-wal`, '');
   await assert.rejects(() => ensayo(path, () => {}), /-wal/);
+});
+
+test('real-run guards: only the production pooler, and only the copy whose sha256 was approved', () => {
+  const ok = `postgresql://postgres.${PROD_REF}:pw@aws-0-us-east-1.pooler.supabase.com:5432/postgres`;
+  checkTarget(ok, 5432);
+  checkTarget(ok.replace(':5432', ':6543').replace('postgres.', 'ya_cayo_app.'), 6543);
+  for (const bad of [ok.replace('aws-0-us-east-1.pooler.supabase.com', 'localhost'), ok.replace(PROD_REF, 'otherref'), ok.replace(':5432', ':6543')])
+    assert.throws(() => checkTarget(bad, 5432), /production pooler/);
+  const path = fixture();
+  const hash = createHash('sha256').update(readFileSync(path)).digest('hex');
+  assert.equal(loadSource(path, hash).rows.orders.length, 5);
+  assert.throws(() => loadSource(path, 'a'.repeat(64)), /does not match/);
+  assert.throws(() => loadSource(path, 'short'), /64-hex/);
+  writeFileSync(`${path}-wal`, '');
+  assert.throws(() => loadSource(path, hash), /-wal/);
 });

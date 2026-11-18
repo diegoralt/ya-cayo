@@ -2,7 +2,8 @@
 // supabase/migrations/20261117000000_english_names.sql). NON-destructive: INSERT … ON CONFLICT DO NOTHING only
 // (never DELETE/TRUNCATE), so it can be repeated and never overwrites facts created in Postgres afterwards.
 // H8a: `node scripts/migrar-sqlite-a-pg.js --ensayo [--sqlite ruta]` rehearses everything on a throwaway local database.
-// H8b adds the real run (--aplicar/--verificar against a production target, with Diego's approval).
+// H8b real run (Diego's approval right before): `--aplicar --sqlite COPY --sha256 HASH` imports into production, `--verificar` (strict) compares.
+// Both read DATABASE_URL_ADMIN (Supabase session pooler :5432, administrator: ya_cayo_app has no setval) from the environment; verify uses DATABASE_URL_APP if set.
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -174,9 +175,42 @@ export async function ensayo(sqlitePath, log = console.log) {
   return { counts, sha256: before };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const args = process.argv.slice(2);
-  if (!args.includes('--ensayo')) { console.error('usage: node scripts/migrar-sqlite-a-pg.js --ensayo [--sqlite ruta]  (the real run arrives in H8b)'); process.exit(2); }
-  const i = args.indexOf('--sqlite');
-  ensayo(i >= 0 ? args[i + 1] : './ya-cayo.sqlite').then((r) => console.log('ENSAYO OK', JSON.stringify(r.counts)), (e) => { console.error(e.message); process.exit(1); });
+export const PROD_REF = 'uogquzsxfwpnzrywwsvt';
+// Pure guard: the real run only talks to the production Supabase pooler (never localhost, never another project).
+export function checkTarget(url, port) {
+  const u = new URL(url);
+  const ok = u.hostname.endsWith('.pooler.supabase.com') && decodeURIComponent(u.username).endsWith(`.${PROD_REF}`) && u.port === String(port);
+  if (!ok) throw new Error(`target is not the production pooler (*.pooler.supabase.com:${port}, user *.${PROD_REF})`);
 }
+
+// The copy must be exactly the one whose hash Diego saw: same sha256, no -wal.
+export function loadSource(path, expectedSha) {
+  if (!/^[0-9a-f]{64}$/.test(expectedSha ?? '')) throw new Error('--sha256 must be the 64-hex hash of the copy');
+  if (existsSync(`${path}-wal`)) throw new Error('the SQLite has a -wal file: copy after the writer stopped and checkpointed');
+  if (sha(path) !== expectedSha) throw new Error('sha256 of the SQLite does not match --sha256');
+  return readSqlite(path);
+}
+
+async function main(args) {
+  const arg = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
+  if (args.includes('--ensayo')) { const r = await ensayo(arg('--sqlite') ?? './ya-cayo.sqlite'); return console.log('ENSAYO OK', JSON.stringify(r.counts)); }
+  const aplicar = args.includes('--aplicar');
+  if (!aplicar && !args.includes('--verificar')) throw new Error('usage: --ensayo | --aplicar --sqlite COPY --sha256 HASH | --verificar --sqlite COPY --sha256 HASH [--extra]');
+  const admin = process.env.DATABASE_URL_ADMIN;
+  if (!admin) throw new Error('missing DATABASE_URL_ADMIN (session pooler :5432, administrator)');
+  checkTarget(admin, 5432);
+  const src = loadSource(arg('--sqlite'), arg('--sha256'));
+  const counts = Object.fromEntries(Object.entries(src.rows).map(([t, l]) => [t, l.length]));
+  const adm = openDb(admin, { max: 1 });
+  const appUrl = process.env.DATABASE_URL_APP;
+  if (appUrl) checkTarget(appUrl, 6543);
+  const app = appUrl ? openDb(appUrl) : adm;
+  try {
+    if (aplicar) console.log('inserted', JSON.stringify(await importToPg(adm, src)), 'of', JSON.stringify(counts));
+    const diffs = await verify(app, src, { extra: args.includes('--extra') });
+    if (diffs.length) throw new Error(`VERIFY FAILED:\n${diffs.join('\n')}`);
+    console.log('VERIFY OK', JSON.stringify(counts), `(as ${appUrl ? 'ya_cayo_app' : 'administrator'})`);
+  } finally { await Promise.all([adm.end({ timeout: 2 }), app === adm ? 0 : app.end({ timeout: 2 })]); }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2)).catch((e) => { console.error(e.message); process.exit(1); });
