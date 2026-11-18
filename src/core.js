@@ -9,10 +9,11 @@ export const nowSec = () => Math.floor(Date.now() / 1000);
 const asNumber = { to: 0, from: [], serialize: String, parse: Number };
 const types = { bigint: { ...asNumber, to: 20, from: [20] }, numeric: { ...asNumber, to: 1700, from: [1700] } };
 
-// Behind Supabase's transaction pooler: prepare:false and few connections per instance (max:1 by default).
+// Behind Supabase's transaction pooler: prepare:false and few connections per instance. max must be > 1:
+// with max:1 on port 6543, concurrent queries pipelined on one connection hang (measured 17-nov, H7).
 export function openDb(url, opts = {}) {
   if (!url) throw new Error('missing database URL');
-  return postgres(url, { prepare: false, max: 1, idle_timeout: 20, connect_timeout: 10, onnotice: () => {}, types, ...opts });
+  return postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, onnotice: () => {}, types, ...opts });
 }
 
 export const CREATING_TIMEOUT_S = 30; // an attempt with no qr_id older than this is considered stuck (pey takes ≤15 s per call)
