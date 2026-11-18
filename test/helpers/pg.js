@@ -16,15 +16,17 @@ const admin = postgres(ADMIN, { max: 1, onnotice: () => {}, connect_timeout: 5 }
 const abiertas = [];
 const conBase = (url, name) => { const u = new URL(url); u.pathname = `/${name}`; return u.toString(); };
 
-// -> { db, url, openConn(opts) }: db is the app connection (non-superuser role); openConn() gives another independent connection.
+// -> { db, url, openConn(opts), openAdmin() }: db is the app connection (non-superuser role); openConn() gives another independent connection.
 export async function newDb(opts = {}) {
   const name = `yc_${process.pid}_${randomBytes(4).toString('hex')}`;
   await admin.unsafe(`CREATE DATABASE ${name} TEMPLATE ya_cayo_tpl`);
   const url = conBase(APP, name);
   const conexiones = [];
   const openConn = (o = {}) => { const c = openDb(url, { ...opts, ...o }); conexiones.push(c); return c; };
+  // The migration importer needs setval (a privilege the app role must not have): it runs as the administrator.
+  const openAdmin = () => { const c = openDb(conBase(ADMIN, name)); conexiones.push(c); return c; };
   abiertas.push({ name, conexiones });
-  return { db: openConn(), url, openConn };
+  return { db: openConn(), url, openConn, openAdmin };
 }
 
 after(async () => {
