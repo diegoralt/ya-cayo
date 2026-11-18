@@ -36,3 +36,12 @@ Por el puerto 6543 con `max: 1`, varias consultas simultáneas en la misma conex
 ## Pendiente de H7
 - [x] Arranque en frío: tras 12 min de inactividad, `/health` 0,80 s y `/api/orders` 0,51 s a la primera; 0,38 s y 0,29 s a la segunda. Tras pocos minutos: 1,05 s la primera `/health`. El coste del frío es ≲ 0,5 s sobre el caliente.
 - [x] Aprobación de Diego de la compuerta de H7 (17-nov-2026), con la evidencia de este archivo.
+
+## H8b · Corte real SQLite → Postgres (18-nov-2026, aprobado por Diego)
+- **Preflight (solo lectura, producción `uogquzsxfwpnzrywwsvt`):** 4 migraciones aplicadas (las de `supabase/migrations/`), 7 tablas con RLS, las cinco de datos y `limits` en 0, `ya_cayo_app` sin superusuario ni `BYPASSRLS`, secuencias vírgenes.
+- **Congelación:** se detuvo solo el servidor del túnel (proceso con `ya-cayo.sqlite` abierto, puerto 8787); el túnel `yacayo` y el SQLite quedan intactos. Sin `-wal` ni `-journal`.
+- **Copia:** `~/.config/ya-cayo/backup-2026-11-18.sqlite` (fuera del repo, modo 600), sha256 `217f8ccb158bfb50ca119b8ee61ba81f143bcdb432ca3094d2f2a412a5f3b4e1`, idéntico al original antes y después.
+- **`--aplicar`** (administrador por pooler 5432): insertó orders 10, transactions 8, records 2, events 1, deliveries 3 (= origen). Verificación estricta como `ya_cayo_app` (6543, con RLS): OK.
+- **`--verificar` aparte** (administrador): OK, mismo conteo. SQLite original sin cambios (sha256 igual).
+- **Estado tras el corte:** PG es la fuente de verdad; el webhook de pey sigue apuntando al túnel viejo (servidor detenido) hasta H9. Los pagos del intervalo se confirman por conciliación al consultar (ventana de 30 min).
+- **Reversión:** PG sigue siendo la fuente; el importador es repetible y no pisa hechos nuevos de PG.
