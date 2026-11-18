@@ -7,3 +7,6 @@ node_modules/
 *.sqlite*
 docs/entrega/*.local.md
 .pg-test.env
+.vercel
+.env.local
+supabase/.temp
