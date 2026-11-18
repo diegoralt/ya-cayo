@@ -78,7 +78,10 @@ export function createHandler({ db, pey, secret, pin, holder = '[titular por dec
       if (req.method === 'GET' && path === '/api/orders') {
         const ids = await db`SELECT id, qr_id, status, expires_at FROM orders WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
         await reconcileOnRead(db, pey, [...ids]);
-        return json(res, 200, await Promise.all(ids.map(async ({ id }) => cashierView(await orderView(db, id)))));
+        // Sequential on purpose: up to 20 orders x 3 queries fired at once hang the transaction pooler (found in production, H9).
+        const views = [];
+        for (const { id } of ids) views.push(cashierView(await orderView(db, id)));
+        return json(res, 200, views);
       }
       if (req.method === 'POST' && path === '/api/orders') {
         const b = JSON.parse((await readBody(req)) || '{}');
