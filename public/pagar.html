@@ -74,50 +74,50 @@
 const token = location.pathname.split('/').pop();
 const $ = (id) => document.getElementById(id);
 const pesos = (c) => '$' + (c / 100).toFixed(2) + ' MXN';
-const ESTADOS = {
-  esperando: ['e-info', '⏳ Esperando tu pago', 'Una captura de pantalla no cuenta como pago.'],
-  pagada: ['e-ok', '✔ Ya cayó tu pago', 'Confirmado por el servidor. Muestra esta pantalla en caja.'],
-  entregada: ['e-ok', '✔ Pago confirmado y entregado', 'Gracias. Ya puedes cerrar esta pantalla.'],
-  vencida: ['e-bad', '⌛ QR vencido', 'Pide un cobro nuevo en caja. Si ya pagaste, avisa en caja: se revisa a mano.'],
-  tardio: ['e-warn', '⚠ Pago recibido fuera de tiempo', 'Avisa en caja; se resuelve a mano.'],
-  noexiste: ['e-bad', 'Este enlace no existe o ya no está disponible', 'Pide uno nuevo en caja.'],
-  sinred: ['e-warn', 'No pude conectar', 'Reintentando solo. Revisa tu conexión a internet.'],
+const STATES = {
+  waiting: ['e-info', '⏳ Esperando tu pago', 'Una captura de pantalla no cuenta como pago.'],
+  paid: ['e-ok', '✔ Ya cayó tu pago', 'Confirmado por el servidor. Muestra esta pantalla en caja.'],
+  delivered: ['e-ok', '✔ Pago confirmado y entregado', 'Gracias. Ya puedes cerrar esta pantalla.'],
+  expired: ['e-bad', '⌛ QR vencido', 'Pide un cobro nuevo en caja. Si ya pagaste, avisa en caja: se revisa a mano.'],
+  late: ['e-warn', '⚠ Pago recibido fuera de tiempo', 'Avisa en caja; se resuelve a mano.'],
+  notFound: ['e-bad', 'Este enlace no existe o ya no está disponible', 'Pide uno nuevo en caja.'],
+  offline: ['e-warn', 'No pude conectar', 'Reintentando solo. Revisa tu conexión a internet.'],
 };
-let v = null, falla = false, noexiste = false;
-function estado(k, sub) {
-  const [cls, t, s] = ESTADOS[k], texto = sub ?? s, key = cls + t + texto;
+let v = null, failed = false, notFound = false;
+function setStatus(k, sub) {
+  const [cls, t, s] = STATES[k], texto = sub ?? s, key = cls + t + texto;
   if ($('estado').dataset.k === key) return;
   $('estado').dataset.k = key; $('estado').className = 'estado ' + cls; $('estado').innerHTML = '';
   const b = document.createElement('div'); b.textContent = t; const sm = document.createElement('small'); sm.textContent = texto; $('estado').append(b, sm);
   document.title = t + ' · Ya Cayó';
 }
-function pinta() {
-  if (noexiste) { $('tarjeta').hidden = true; return estado('noexiste'); }
-  if (!v) return falla ? estado('sinred') : undefined;
+function paint() {
+  if (notFound) { $('tarjeta').hidden = true; return setStatus('notFound'); }
+  if (!v) return failed ? setStatus('offline') : undefined;
   $('tarjeta').hidden = false;
-  $('titular').textContent = v.titular; $('concepto').textContent = v.concepto; $('monto').textContent = pesos(v.montoCentavos);
-  const pagado = v.estado !== 'pendiente';
-  const k = pagado ? v.estado : v.tardio ? 'tardio' : v.vencida ? 'vencida' : 'esperando';
-  estado(k, falla && k === 'esperando' ? 'Sin conexión: reintentando. Si ya pagaste, se confirmará al reconectar.' : undefined);
-  const esp = k === 'esperando';
+  $('titular').textContent = v.holder; $('concepto').textContent = v.concept; $('monto').textContent = pesos(v.amountCents);
+  const isPaid = v.status !== 'pending';
+  const k = isPaid ? v.status : v.late ? 'late' : v.expired ? 'expired' : 'waiting';
+  setStatus(k, failed && k === 'waiting' ? 'Sin conexión: reintentando. Si ya pagaste, se confirmará al reconectar.' : undefined);
+  const esp = k === 'waiting';
   const img = esp && v.qrImage ? (v.qrImage.startsWith('data:') ? v.qrImage : 'data:image/png;base64,' + v.qrImage) : null;
   $('qr').hidden = !img; if (img && $('qr').dataset.s !== img) { $('qr').dataset.s = img; $('qr').src = img; }
   $('qrtexto').hidden = !esp || !!v.qrImage || !v.qrString; $('qrtexto').textContent = v.qrString ?? '';
-  const resto = Math.max(0, v.expiraEn - Math.floor(Date.now() / 1000));
-  $('titulo').textContent = k === 'pagada' || k === 'entregada' ? 'Pagaste' : k === 'tardio' ? 'Pago recibido fuera de tiempo' : 'Vas a pagar';
-  $('sello').hidden = !(k === 'pagada' || k === 'entregada');
+  const resto = Math.max(0, v.expiresAt - Math.floor(Date.now() / 1000));
+  $('titulo').textContent = k === 'paid' || k === 'delivered' ? 'Pagaste' : k === 'late' ? 'Pago recibido fuera de tiempo' : 'Vas a pagar';
+  $('sello').hidden = !(k === 'paid' || k === 'delivered');
   $('ayuda').hidden = !esp;
-  $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, resto / 3.6) + '%' : '0%'; // 360 s = vigencia mínima del QR
+  $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, resto / 3.6) + '%' : '0%'; // 360 s = minimum QR validity
   $('cuenta').textContent = esp ? 'Vence en ' + String(Math.floor(resto / 60)).padStart(2, '0') + ':' + String(resto % 60).padStart(2, '0') : '';
 }
-let ocupado = false; // una consulta a la vez
-async function cargar() {
-  if (noexiste || ocupado) return;
-  ocupado = true;
-  try { const r = await fetch('/api/pago/' + encodeURIComponent(token)); if (r.status === 404) { noexiste = true; return pinta(); } if (!r.ok) throw 0; v = await r.json(); falla = false; } catch { falla = true; }
-  ocupado = false; pinta();
+let busy = false; // one query at a time
+async function load() {
+  if (notFound || busy) return;
+  busy = true;
+  try { const r = await fetch('/api/payment/' + encodeURIComponent(token)); if (r.status === 404) { notFound = true; return paint(); } if (!r.ok) throw 0; v = await r.json(); failed = false; } catch { failed = true; }
+  busy = false; paint();
 }
-cargar(); setInterval(cargar, 2000); setInterval(pinta, 1000);
+load(); setInterval(load, 2000); setInterval(paint, 1000);
 </script>
 </body>
 </html>

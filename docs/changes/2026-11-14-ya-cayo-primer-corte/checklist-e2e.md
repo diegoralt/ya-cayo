@@ -4,7 +4,7 @@ Requiere H0 (app tras el túnel) y H1 (alguien con CoDi que pague). Marcar cada 
 
 ## Preparación
 - [ ] `curl -fsS https://pey.drkingsia.com/health` → `{"ok":true,"app":"ya-cayo"}` (no «sonda viva»).
-- [ ] `.env` con `PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DEMO_PIN`, `TITULAR`; un solo webhook en el portal apuntando a `/webhook`.
+- [ ] `.env` con `PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DEMO_PIN`, `HOLDER_NAME`; un solo webhook en el portal apuntando a `/webhook`.
 - [ ] Caja abierta en celular/tablet; PIN incorrecto → rechazado; PIN correcto → entra.
 
 ## Por estado

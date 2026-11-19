@@ -1,17 +1,17 @@
--- H3: evento «recibido» vs «procesado», reservas atómicas (limites) y conciliación pendiente durable.
--- Aditiva. Mismo patrón de seguridad que el esquema inicial: RLS activo, REVOKE a anon/authenticated,
--- grants y política solo para ya_cayo_app.
+-- H3: event «received» vs «processed», atomic reservations (limites) and durable pending reconciliation.
+-- Additive. Same security pattern as the initial schema: RLS on, REVOKE from anon/authenticated,
+-- grants and policy only for ya_cayo_app.
 
-ALTER TABLE public.eventos ADD COLUMN procesado_en bigint; -- NULL = recibido y aún no procesado (el reintento sí procesa)
+ALTER TABLE public.eventos ADD COLUMN procesado_en bigint; -- NULL = received and not yet processed (the retry does process)
 
--- Reservas y contadores atómicos con vencimiento (clave = 'conc:<orden>'; H5 reutiliza: PIN por IP, cupo de vivos).
+-- Atomic reservations and counters with expiry (key = 'conc:<order>'; H5 reuses it: PIN by IP, live quota).
 CREATE TABLE public.limites (
   clave text PRIMARY KEY,
   valor bigint NOT NULL DEFAULT 0,
   vence_en bigint NOT NULL
 );
 
--- Órdenes cuya conciliación empezó y no terminó bien (pey caído, función cortada): se retoman en el siguiente acceso.
+-- Orders whose reconciliation started and did not end well (pey down, function cut): picked up on the next access.
 CREATE TABLE public.conciliacion_pendiente (
   orden_id bigint PRIMARY KEY REFERENCES public.ordenes(id) ON DELETE CASCADE,
   desde bigint NOT NULL

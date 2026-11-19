@@ -1,98 +1,98 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nuevaDb } from './helpers/pg.js';
-import { crearOrden, aplicarTransacciones, conciliar, entregar, contarEntregas, vista } from '../src/core.js';
+import { newDb } from './helpers/pg.js';
+import { createOrder, applyTransactions, reconcile, deliver, countDeliveries, orderView } from '../src/core.js';
 
 const T0 = 1_000_000;
-const pagoOk = (id, extra = {}) => ({ id, status: 'PAID', amountCents: 1, currency: 'MXN', datePaid: T0 + 10, ...extra });
+const paidTx = (id, extra = {}) => ({ id, status: 'PAID', amountCents: 1, currency: 'MXN', datePaid: T0 + 10, ...extra });
 let nQr = 0;
 const feyPey = (txs, demora = 0) => ({
   createQr: async () => ({ id: `QR${++nQr}` }),
   listQrTransactions: async () => { if (demora) await new Promise((r) => setTimeout(r, demora)); return txs; },
 });
 async function nueva(db, pey = feyPey([])) {
-  const { id } = await crearOrden(db, pey, { concepto: 'ticket 1', montoCentavos: 1, now: T0 });
+  const { id } = await createOrder(db, pey, { concept: 'ticket 1', amountCents: 1, now: T0 });
   return id;
 }
 
-test('a) reenvío secuencial: mismas transacciones dos veces = un hecho, una entrega', async () => {
-  const { db } = await nuevaDb(); const id = await nueva(db);
-  await aplicarTransacciones(db, id, [pagoOk('T1')]);
-  await aplicarTransacciones(db, id, [pagoOk('T1')]);
-  assert.equal((await vista(db, id, T0)).transacciones.length, 1);
-  assert.equal((await entregar(db, id)).ok, true);
-  assert.equal((await entregar(db, id)).ok, false);
-  assert.equal(await contarEntregas(db, id), 1);
+test('a) sequential resend: same transactions twice = one fact, one delivery', async () => {
+  const { db } = await newDb(); const id = await nueva(db);
+  await applyTransactions(db, id, [paidTx('T1')]);
+  await applyTransactions(db, id, [paidTx('T1')]);
+  assert.equal((await orderView(db, id, T0)).transactions.length, 1);
+  assert.equal((await deliver(db, id)).ok, true);
+  assert.equal((await deliver(db, id)).ok, false);
+  assert.equal(await countDeliveries(db, id), 1);
 });
 
-test('b) intercalación: GET A, GET B, confirmar A, entregar, aplicar B no reabre ni duplica', async () => {
-  const { db } = await nuevaDb(); const id = await nueva(db);
-  const A = [pagoOk('T1')], B = [pagoOk('T1'), pagoOk('T2', { datePaid: T0 + 20 })];
-  await aplicarTransacciones(db, id, A);
-  assert.equal((await entregar(db, id)).ok, true);
-  await aplicarTransacciones(db, id, B);
-  const v = await vista(db, id, T0);
-  assert.equal(v.estado, 'entregada');
-  assert.equal(v.entregas, 1);
-  assert.deepEqual(v.transacciones.map((t) => t.clasificacion).sort(), ['duplicada', 'valida']);
+test('b) interleaving: GET A, GET B, confirm A, deliver, apply B neither reopens nor duplicates', async () => {
+  const { db } = await newDb(); const id = await nueva(db);
+  const A = [paidTx('T1')], B = [paidTx('T1'), paidTx('T2', { datePaid: T0 + 20 })];
+  await applyTransactions(db, id, A);
+  assert.equal((await deliver(db, id)).ok, true);
+  await applyTransactions(db, id, B);
+  const v = await orderView(db, id, T0);
+  assert.equal(v.status, 'delivered');
+  assert.equal(v.deliveries, 1);
+  assert.deepEqual(v.transactions.map((t) => t.classification).sort(), ['duplicate', 'valid']);
 });
 
-test('c) dos transactionId distintos del mismo ticket: una válida, una duplicada, una sola entrega', async () => {
-  const { db } = await nuevaDb(); const id = await nueva(db);
-  await aplicarTransacciones(db, id, [pagoOk('T1'), pagoOk('T2', { datePaid: T0 + 11 })]);
-  assert.equal((await vista(db, id, T0)).duplicado, true);
-  assert.equal((await entregar(db, id)).ok, true);
-  assert.equal((await entregar(db, id)).ok, false);
-  assert.equal(await contarEntregas(db, id), 1);
+test('c) two different transactionIds for the same ticket: one valid, one duplicate, a single delivery', async () => {
+  const { db } = await newDb(); const id = await nueva(db);
+  await applyTransactions(db, id, [paidTx('T1'), paidTx('T2', { datePaid: T0 + 11 })]);
+  assert.equal((await orderView(db, id, T0)).duplicate, true);
+  assert.equal((await deliver(db, id)).ok, true);
+  assert.equal((await deliver(db, id)).ok, false);
+  assert.equal(await countDeliveries(db, id), 1);
 });
 
-test('d) fallo entre UPDATE e INSERT: rollback, sigue pagada y sin entrega extra', async () => {
-  const { db } = await nuevaDb(); const id = await nueva(db);
-  await aplicarTransacciones(db, id, [pagoOk('T1')]);
-  await db`INSERT INTO entregas(orden_id, entregada_en) VALUES (${id}, ${T0})`; // estado corrupto a propósito
-  await assert.rejects(entregar(db, id));
-  assert.equal((await vista(db, id, T0)).estado, 'pagada');
-  assert.equal(await contarEntregas(db, id), 1);
+test('d) failure between UPDATE and INSERT: rollback, stays paid and no extra delivery', async () => {
+  const { db } = await newDb(); const id = await nueva(db);
+  await applyTransactions(db, id, [paidTx('T1')]);
+  await db`INSERT INTO deliveries(order_id, delivered_at) VALUES (${id}, ${T0})`; // deliberately corrupt status
+  await assert.rejects(deliver(db, id));
+  assert.equal((await orderView(db, id, T0)).status, 'paid');
+  assert.equal(await countDeliveries(db, id), 1);
 });
 
-test('e) reinicio: el estado y la entrega única sobreviven a cerrar y reabrir la conexión', async () => {
-  const { db: db1, abrir } = await nuevaDb(); const id = await nueva(db1);
-  await aplicarTransacciones(db1, id, [pagoOk('T1')]);
-  assert.equal((await entregar(db1, id)).ok, true);
+test('e) restart: the status and the single delivery survive closing and reopening the connection', async () => {
+  const { db: db1, openConn } = await newDb(); const id = await nueva(db1);
+  await applyTransactions(db1, id, [paidTx('T1')]);
+  assert.equal((await deliver(db1, id)).ok, true);
   await db1.end();
-  const db = abrir();
-  await aplicarTransacciones(db, id, [pagoOk('T1'), pagoOk('T3', { datePaid: T0 + 12 })]);
-  assert.equal((await entregar(db, id)).ok, false);
-  const v = await vista(db, id, T0);
-  assert.equal(v.estado, 'entregada');
-  assert.equal(v.entregas, 1);
+  const db = openConn();
+  await applyTransactions(db, id, [paidTx('T1'), paidTx('T3', { datePaid: T0 + 12 })]);
+  assert.equal((await deliver(db, id)).ok, false);
+  const v = await orderView(db, id, T0);
+  assert.equal(v.status, 'delivered');
+  assert.equal(v.deliveries, 1);
 });
 
-test('f) conciliaciones concurrentes (webhook y polling a la vez) no duplican', async () => {
-  const { db } = await nuevaDb({ max: 4 }); const pey = feyPey([pagoOk('T1')], 20); const id = await nueva(db, pey);
-  const [r1, r2] = await Promise.all([conciliar(db, pey, id), conciliar(db, pey, id)]);
+test('f) concurrent reconciliations (webhook and polling at once) do not duplicate', async () => {
+  const { db } = await newDb({ max: 4 }); const pey = feyPey([paidTx('T1')], 20); const id = await nueva(db, pey);
+  const [r1, r2] = await Promise.all([reconcile(db, pey, id), reconcile(db, pey, id)]);
   assert.ok(r1.ok && r2.ok);
-  assert.equal((await vista(db, id, T0)).transacciones.length, 1);
-  assert.equal((await entregar(db, id)).ok, true);
-  await conciliar(db, pey, id);
-  assert.equal(await contarEntregas(db, id), 1);
+  assert.equal((await orderView(db, id, T0)).transactions.length, 1);
+  assert.equal((await deliver(db, id)).ok, true);
+  await reconcile(db, pey, id);
+  assert.equal(await countDeliveries(db, id), 1);
 });
 
-test('pago tardío, de otro monto o PENDING no habilitan la entrega', async () => {
-  const { db } = await nuevaDb();
+test('a late payment, one of another amount, or PENDING do not enable delivery', async () => {
+  const { db } = await newDb();
   let id = await nueva(db);
-  await aplicarTransacciones(db, id, [pagoOk('T1', { datePaid: T0 + 361 })]);
-  assert.equal((await vista(db, id, T0)).tardio, true);
-  assert.equal((await entregar(db, id)).ok, false);
+  await applyTransactions(db, id, [paidTx('T1', { datePaid: T0 + 361 })]);
+  assert.equal((await orderView(db, id, T0)).late, true);
+  assert.equal((await deliver(db, id)).ok, false);
   id = await nueva(db, feyPey([]));
-  await aplicarTransacciones(db, id, [pagoOk('T2', { amountCents: 2 }), { id: 'T3', status: 'PENDING', amountCents: 1, currency: 'MXN' }]);
-  assert.equal((await entregar(db, id)).ok, false);
+  await applyTransactions(db, id, [paidTx('T2', { amountCents: 2 }), { id: 'T3', status: 'PENDING', amountCents: 1, currency: 'MXN' }]);
+  assert.equal((await deliver(db, id)).ok, false);
 });
 
-test('consulta fallida no cambia el estado', async () => {
-  const { db } = await nuevaDb(); const id = await nueva(db);
+test('a failed query does not change the status', async () => {
+  const { db } = await newDb(); const id = await nueva(db);
   const pey = { listQrTransactions: async () => { throw new Error('503'); } };
-  const r = await conciliar(db, pey, id);
+  const r = await reconcile(db, pey, id);
   assert.equal(r.ok, false);
-  assert.equal((await vista(db, id, T0)).estado, 'pendiente');
+  assert.equal((await orderView(db, id, T0)).status, 'pending');
 });

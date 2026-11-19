@@ -145,23 +145,23 @@
 const $ = (id) => document.getElementById(id);
 const pesos = (c) => '$' + (c / 100).toFixed(2);
 let pin = ''; try { pin = sessionStorage.getItem('pin') ?? ''; } catch {}
-let ordenes = [], selId = null, comision = 0.03, vozOn = true, previo = {};
-async function api(ruta, init = {}) {
-  const r = await fetch('/api' + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json' } });
-  if (r.status === 401 || r.status === 429) { pin = ''; try { sessionStorage.removeItem('pin'); } catch {} $('loginerr').textContent = r.status === 429 ? 'Demasiados intentos. Espera un minuto.' : 'PIN incorrecto. Inténtalo de nuevo.'; muestra(); $('pin').value = ''; $('pin').focus(); throw new Error('PIN rechazado'); }
+let orders = [], selId = null, fee = 0.03, voiceOn = true, previous = {};
+async function api(route, init = {}) {
+  const r = await fetch('/api' + route, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json' } });
+  if (r.status === 401 || r.status === 429) { pin = ''; try { sessionStorage.removeItem('pin'); } catch {} $('loginerr').textContent = r.status === 429 ? 'Demasiados intentos. Espera un minuto.' : 'PIN incorrecto. Inténtalo de nuevo.'; show(); $('pin').value = ''; $('pin').focus(); throw new Error('PIN rechazado'); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error ?? 'error ' + r.status);
   return d;
 }
-function muestra() { const ok = !!pin; $('login').hidden = ok; for (const id of ['app', 'lista', 'met']) $(id).hidden = !ok; if (!ok) $('detalle').hidden = true; }
-$('entrar').onclick = () => { $('loginerr').textContent = ''; pin = $('pin').value; try { sessionStorage.setItem('pin', pin); } catch {} muestra(); refrescar(); };
+function show() { const ok = !!pin; $('login').hidden = ok; for (const id of ['app', 'lista', 'met']) $(id).hidden = !ok; if (!ok) $('detalle').hidden = true; }
+$('entrar').onclick = () => { $('loginerr').textContent = ''; pin = $('pin').value; try { sessionStorage.setItem('pin', pin); } catch {} show(); refresh(); };
 $('pin').onkeydown = (e) => { if (e.key === 'Enter') $('entrar').click(); }; // sin «&&»: devolver false cancelaría la escritura
 
-function nombre(o) {
-  if (o.estado === 'entregada') return o.duplicado ? 'Entregado + duplicado' : 'Entregado';
-  if (o.estado === 'pagada') return 'Pagado';
-  if (o.tardio) return 'Pago tardío';
-  if (o.vencida) return 'Vencido';
+function label(o) {
+  if (o.status === 'delivered') return o.duplicate ? 'Entregado + duplicado' : 'Entregado';
+  if (o.status === 'paid') return 'Pagado';
+  if (o.late) return 'Pago tardío';
+  if (o.expired) return 'Vencido';
   return 'Esperando';
 }
 const ESTADO = {
@@ -172,33 +172,33 @@ const ESTADO = {
   Vencido: ['e-bad', '⌛ QR vencido', 'Crea un cobro nuevo. Se sigue consultando 30 min por si alguien pagó justo antes.'],
   'Pago tardío': ['e-warn', '⚠ Pago tardío · sin entrega automática', 'Llegó tras el vencimiento. Decide a mano; devolución = registro manual.'],
 };
-function voz(txt) { if (vozOn && 'speechSynthesis' in window) { try { speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(txt), { lang: 'es-MX' })); } catch {} } }
+function speak(txt) { if (voiceOn && 'speechSynthesis' in window) { try { speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(txt), { lang: 'es-MX' })); } catch {} } }
 
-let sigLista = '';
-function pintaLista() {
-  $('vacio').hidden = ordenes.length > 0;
-  const sig = JSON.stringify([selId, ordenes.map((o) => [o.id, o.concepto, o.monto_centavos, nombre(o)])]);
-  if (sig === sigLista) return; // no reconstruir si nada cambió: conserva el foco del teclado
-  sigLista = sig; $('filas').innerHTML = '';
-  for (const o of ordenes) {
-    const n = nombre(o), li = document.createElement('li'), bt = document.createElement('button');
+let listSig = '';
+function paintList() {
+  $('vacio').hidden = orders.length > 0;
+  const sig = JSON.stringify([selId, orders.map((o) => [o.id, o.concept, o.amount_cents, label(o)])]);
+  if (sig === listSig) return; // no reconstruir si nada cambió: conserva el foco del teclado
+  listSig = sig; $('filas').innerHTML = '';
+  for (const o of orders) {
+    const n = label(o), li = document.createElement('li'), bt = document.createElement('button');
     bt.type = 'button'; bt.className = 'fila'; bt.setAttribute('aria-pressed', o.id === selId);
     const f1 = document.createElement('span'); f1.className = 'f1';
-    const c = document.createElement('b'); c.textContent = o.concepto; const i = document.createElement('span'); i.className = 'mut'; i.textContent = '#' + o.id;
+    const c = document.createElement('b'); c.textContent = o.concept; const i = document.createElement('span'); i.className = 'mut'; i.textContent = '#' + o.id;
     f1.append(c, i);
     const f2 = document.createElement('span'); f2.className = 'f2';
-    const m = document.createElement('b'); m.textContent = pesos(o.monto_centavos); const ch = document.createElement('span'); ch.className = 'chip ' + ESTADO[n][0]; ch.textContent = n;
+    const m = document.createElement('b'); m.textContent = pesos(o.amount_cents); const ch = document.createElement('span'); ch.className = 'chip ' + ESTADO[n][0]; ch.textContent = n;
     f2.append(m, ch); bt.append(f1, f2);
-    bt.onclick = () => { selId = o.id; pintaLista(); pintaDetalle(); };
+    bt.onclick = () => { selId = o.id; paintList(); paintDetail(); };
     li.append(bt); $('filas').append(li);
   }
 }
-function pintaDetalle() {
-  $('red').hidden = !falla;
-  const o = ordenes.find((x) => x.id === selId);
+function paintDetail() {
+  $('red').hidden = !failed;
+  const o = orders.find((x) => x.id === selId);
   $('detalle').hidden = !o; if (!o) return;
-  const n = nombre(o), [cls, t, s] = ESTADO[n], texto = falla ? 'No pude consultar al servidor · reintentando' : s, key = cls + t + texto;
-  $('resumen').textContent = pesos(o.monto_centavos); $('resumen2').textContent = `#${o.id} · ${o.concepto}`;
+  const n = label(o), [cls, t, s] = ESTADO[n], texto = failed ? 'No pude consultar al servidor · reintentando' : s, key = cls + t + texto;
+  $('resumen').textContent = pesos(o.amount_cents); $('resumen2').textContent = `#${o.id} · ${o.concept}`;
   if ($('estado').dataset.k !== key) { // solo si cambia: evita que el lector de pantalla repita el aviso cada segundo
     $('estado').dataset.k = key; $('estado').className = 'estado ' + cls; $('estado').innerHTML = '';
     const b = document.createElement('div'); b.textContent = t; const sm = document.createElement('small'); sm.textContent = texto; $('estado').append(b, sm);
@@ -207,86 +207,86 @@ function pintaDetalle() {
   const img = esp && o.qr_image ? (o.qr_image.startsWith('data:') ? o.qr_image : 'data:image/png;base64,' + o.qr_image) : null;
   $('qr').hidden = !img; if (img && $('qr').dataset.s !== img) { $('qr').dataset.s = img; $('qr').src = img; }
   $('qrtexto').hidden = !esp || !!o.qr_image || !o.qr_string; $('qrtexto').textContent = o.qr_string ?? '';
-  const resto = Math.max(0, o.expira_en - Math.floor(Date.now() / 1000));
-  $('cuenta').textContent = esp ? 'Vence en ' + String(Math.floor(resto / 60)).padStart(2, '0') + ':' + String(resto % 60).padStart(2, '0') : '';
+  const remaining = Math.max(0, o.expires_at - Math.floor(Date.now() / 1000));
+  $('cuenta').textContent = esp ? 'Vence en ' + String(Math.floor(remaining / 60)).padStart(2, '0') + ':' + String(remaining % 60).padStart(2, '0') : '';
   $('sello').hidden = !(n === 'Pagado' || n.startsWith('Entregado')); $('sello').className = 'sello' + (n.includes('duplicado') ? ' dup' : ''); $('sello').textContent = n.includes('duplicado') ? 'Ya cayó ×2' : 'Ya cayó';
-  $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, resto / 3.6) + '%' : '0%'; // 360 s = vigencia mínima del QR
-  $('info').textContent = `Transacciones: ${o.transacciones} · entregas: ${o.entregas}`;
-  $('entregar').disabled = o.estado !== 'pagada' || falla; // sin conexión no se entrega: el dato puede estar viejo
-  $('entregar').textContent = o.estado === 'entregada' ? 'Ya entregado ✔' : o.estado === 'pagada' ? 'Entregar' : n === 'Pago tardío' ? 'Pago fuera de plazo · revisar a mano' : 'Entregar · sin pago confirmado';
+  $('pista').hidden = !esp; $('barra').style.width = esp ? Math.min(100, remaining / 3.6) + '%' : '0%'; // 360 s = vigencia mínima del QR
+  $('info').textContent = `Transacciones: ${o.transactions} · entregas: ${o.deliveries}`;
+  $('entregar').disabled = o.status !== 'paid' || failed; // sin conexión no se entrega: el dato puede estar viejo
+  $('entregar').textContent = o.status === 'delivered' ? 'Ya entregado ✔' : o.status === 'paid' ? 'Entregar' : n === 'Pago tardío' ? 'Pago fuera de plazo · revisar a mano' : 'Entregar · sin pago confirmado';
   $('enlace').href = '/pagar/' + o.token; $('enlace').textContent = location.origin + '/pagar/' + o.token;
 }
-let falla = false;
-let ocupado = false; // una consulta a la vez: evita que una respuesta lenta pise a otra más nueva
-async function refrescar() {
-  if (!pin || ocupado) return;
-  ocupado = true;
+let failed = false;
+let busy = false; // una consulta a la vez: evita que una respuesta lenta pise a otra más nueva
+async function refresh() {
+  if (!pin || busy) return;
+  busy = true;
   try {
-    ordenes = await api('/ordenes'); falla = false;
-    for (const o of ordenes) { if (previo[o.id] === 'pendiente' && o.estado === 'pagada') voz('Ya cayó el pago de ' + pesos(o.monto_centavos).replace('$', '') + ' pesos'); previo[o.id] = o.estado; }
-    if (selId == null && ordenes[0]) selId = ordenes[0].id;
-    pintaLista(); pintaDetalle();
-    const m = await api('/metricas'); comision = m.comision; pintaMetricas(m); pintaReco();
-  } catch (e) { if (pin) { falla = true; pintaDetalle(); } } finally { ocupado = false; }
+    orders = await api('/orders'); failed = false;
+    for (const o of orders) { if (previous[o.id] === 'pending' && o.status === 'paid') speak('Ya cayó el pago de ' + pesos(o.amount_cents).replace('$', '') + ' pesos'); previous[o.id] = o.status; }
+    if (selId == null && orders[0]) selId = orders[0].id;
+    paintList(); paintDetail();
+    const m = await api('/metrics'); fee = m.fee; paintMetrics(m); paintReco();
+  } catch (e) { if (pin) { failed = true; paintDetail(); } } finally { busy = false; }
 }
-function pintaMetricas(m) {
+function paintMetrics(m) {
   const seg = (x) => x == null ? '—' : x.toFixed(1) + ' s';
-  const items = [['Tiempo de cobro', seg(m.segundosCobro), 'crear QR → pago (promedio)'], ['Latencia de confirmación', seg(m.segundosLatencia), 'pago → servidor lo confirma'], ['Entregas por orden (máx.)', m.maxEntregasPorOrden, 'se mantiene en 1 al reprocesar'], ['Cobros / pagados / entregados', `${m.cobros} / ${m.pagadas} / ${m.entregadas}`, ''], ['Aceptación de CoDi', `${m.aceptacionCodi.codi} de ${m.aceptacionCodi.codi + m.aceptacionCodi.otros}`, 'cobros CoDi vs. «tarjeta o efectivo»'], ['Comisión de tarjeta evitada (estimada)', pesos(m.comisionEvitadaCentavos), `supuesto ${(m.comision * 100).toFixed(1)}%; no medida`]];
+  const items = [['Tiempo de cobro', seg(m.chargeSeconds), 'crear QR → pago (promedio)'], ['Latencia de confirmación', seg(m.latencySeconds), 'pago → servidor lo confirma'], ['Entregas por orden (máx.)', m.maxDeliveriesPerOrder, 'se mantiene en 1 al reprocesar'], ['Cobros / pagados / entregados', `${m.charges} / ${m.paid} / ${m.delivered}`, ''], ['Aceptación de CoDi', `${m.codiAcceptance.codi} de ${m.codiAcceptance.codi + m.codiAcceptance.other}`, 'cobros CoDi vs. «tarjeta o efectivo»'], ['Comisión de tarjeta evitada (estimada)', pesos(m.avoidedFeeCents), `supuesto ${(m.fee * 100).toFixed(1)}%; no medida`]];
   $('cards').innerHTML = '';
   for (const [t, v, d] of items) { const c = document.createElement('div'); c.className = 'm'; const s = document.createElement('span'); s.className = 'mut'; s.textContent = t; const b = document.createElement('b'); b.textContent = v; const e = document.createElement('span'); e.className = 'mut'; e.textContent = d; c.append(s, b, e); $('cards').append(c); }
 }
-function pintaReco() { const c = Math.round(Number($('monto').value) * 100 * comision); $('evitada').textContent = Number.isFinite(c) ? '≈ ' + pesos(c) : '—'; $('supuesto').textContent = `(supuesto ${(comision * 100).toFixed(1)}%, configurable)`; }
-$('monto').oninput = pintaReco;
+function paintReco() { const c = Math.round(Number($('monto').value) * 100 * fee); $('evitada').textContent = Number.isFinite(c) ? '≈ ' + pesos(c) : '—'; $('supuesto').textContent = `(supuesto ${(fee * 100).toFixed(1)}%, configurable)`; }
+$('monto').oninput = paintReco;
 
-let intento = null, intentoDe = ''; // un cobro = un intento: si falla o se corta, el reintento reutiliza la misma clave y no duplica el QR
-async function crear(metodo) {
+let attempt = null, attemptOf = ''; // one charge = one attempt: if it fails or is cut, the retry reuses the same key and does not duplicate the QR
+async function create(method) {
   $('err').textContent = ''; $('cobrar').disabled = $('otro').disabled = true;
-  const clave = [$('concepto').value, $('monto').value, metodo].join('|');
-  if (!intento || intentoDe !== clave) { intento = crypto.randomUUID(); intentoDe = clave; }
+  const key = [$('concepto').value, $('monto').value, method].join('|');
+  if (!attempt || attemptOf !== key) { attempt = crypto.randomUUID(); attemptOf = key; }
   try {
-    const o = await api('/ordenes', { method: 'POST', body: JSON.stringify({ concepto: $('concepto').value, monto: $('monto').value, metodo, intento }) });
-    intento = null;
-    if (!o.registrado) selId = o.id;
-    await refrescar();
-    if (!o.registrado) $('detalle').scrollIntoView({ block: 'start' }); // el QR es lo siguiente que el cajero necesita
+    const o = await api('/orders', { method: 'POST', body: JSON.stringify({ concept: $('concepto').value, amount: $('monto').value, method, attempt }) });
+    attempt = null;
+    if (!o.recorded) selId = o.id;
+    await refresh();
+    if (!o.recorded) $('detalle').scrollIntoView({ block: 'start' }); // el QR es lo siguiente que el cajero necesita
   } catch (e) { $('err').textContent = e.message; } finally { $('cobrar').disabled = $('otro').disabled = false; }
 }
-$('cobrar').onclick = () => crear('codi');
-$('otro').onclick = () => crear('otro');
-const accion = (ruta) => async () => { const b = $(ruta === 'entregar' ? 'entregar' : 'conciliar'); $('errd').textContent = ''; b.disabled = true; try { await api(`/ordenes/${selId}/${ruta}`, { method: 'POST' }); } catch (e) { $('errd').textContent = e.message; } await refrescar(); if (ruta !== 'entregar') b.disabled = false; };
-$('entregar').onclick = accion('entregar');
-$('conciliar').onclick = accion('conciliar');
+$('cobrar').onclick = () => create('codi');
+$('otro').onclick = () => create('other');
+const act = (route) => async () => { const b = $(route === 'deliver' ? 'entregar' : 'conciliar'); $('errd').textContent = ''; b.disabled = true; try { await api(`/orders/${selId}/${route}`, { method: 'POST' }); } catch (e) { $('errd').textContent = e.message; } await refresh(); if (route !== 'deliver') b.disabled = false; };
+$('entregar').onclick = act('deliver');
+$('conciliar').onclick = act('reconcile');
 $('nuevo').onclick = () => { $('app').scrollIntoView({ block: 'start' }); $('concepto').focus({ preventScroll: true }); };
-$('voz').onclick = () => { vozOn = !vozOn; $('voz').setAttribute('aria-pressed', vozOn); $('voz').textContent = vozOn ? '🔊 Voz activada' : '🔇 Voz silenciada'; if (vozOn) voz('Voz activada'); };
-let wl; async function pantalla() { try { wl = await navigator.wakeLock?.request('screen'); } catch {} }
-document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && pin && pantalla());
+$('voz').onclick = () => { voiceOn = !voiceOn; $('voz').setAttribute('aria-pressed', voiceOn); $('voz').textContent = voiceOn ? '🔊 Voz activada' : '🔇 Voz silenciada'; if (voiceOn) speak('Voz activada'); };
+let wl; async function keepAwake() { try { wl = await navigator.wakeLock?.request('screen'); } catch {} }
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && pin && keepAwake());
 
 // Agente simulado: reglas, sin IA. Solo PROPONE concepto y monto; el cajero sigue pulsando «Cobrar». El servidor fija el monto del QR.
 const MENU = [{ id: 'cafe', n: 'Café', pl: 'Cafés', p: 30, re: /\bcafes?\b|americanos?/ }, { id: 'capu', n: 'Capuchino', pl: 'Capuchinos', p: 40, re: /capuchinos?/ }, { id: 'pan', n: 'Pan dulce', pl: 'Panes dulces', p: 15, re: /\bpan(es)?\b|conchas?/ }, { id: 'jugo', n: 'Jugo', pl: 'Jugos', p: 25, re: /jugos?/ }];
 const NUM = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
-let cant = {};
-function proponer(texto) { // → { cant: {id: n}, noEntendido: bool }
+let qty = {};
+function propose(texto) { // → { qty: {id: n}, notUnderstood: bool }
   const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), out = {};
-  for (const it of MENU) { const m = it.re.exec(t); if (!m) continue; const antes = t.slice(0, m.index).trim().split(/\s+/).slice(-2); let q = 1; for (const w of antes.reverse()) { if (/^\d+$/.test(w)) { q = +w; break; } if (NUM[w]) { q = NUM[w]; break; } } out[it.id] = Math.min(q, 20); }
-  return { cant: out, noEntendido: Object.keys(out).length === 0 };
+  for (const it of MENU) { const m = it.re.exec(t); if (!m) continue; const before = t.slice(0, m.index).trim().split(/\s+/).slice(-2); let q = 1; for (const w of before.reverse()) { if (/^\d+$/.test(w)) { q = +w; break; } if (NUM[w]) { q = NUM[w]; break; } } out[it.id] = Math.min(q, 20); }
+  return { qty: out, notUnderstood: Object.keys(out).length === 0 };
 }
-function pintaAg() {
-  const sel = MENU.filter((i) => cant[i.id] > 0), total = sel.reduce((a, i) => a + cant[i.id] * i.p, 0);
+function paintAgent() {
+  const sel = MENU.filter((i) => qty[i.id] > 0), total = sel.reduce((a, i) => a + qty[i.id] * i.p, 0);
   $('menu').innerHTML = '';
-  for (const i of MENU) { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Agregar ' + i.n); const a = document.createElement('span'); a.textContent = (cant[i.id] ? cant[i.id] + '× ' : '') + i.n; const c = document.createElement('b'); c.textContent = '$' + i.p; b.append(a, c); b.onclick = () => { cant[i.id] = (cant[i.id] || 0) + 1; pintaAg(); }; $('menu').append(b); }
+  for (const i of MENU) { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Agregar ' + i.n); const a = document.createElement('span'); a.textContent = (qty[i.id] ? qty[i.id] + '× ' : '') + i.n; const c = document.createElement('b'); c.textContent = '$' + i.p; b.append(a, c); b.onclick = () => { qty[i.id] = (qty[i.id] || 0) + 1; paintAgent(); }; $('menu').append(b); }
   const r = $('agres'); r.innerHTML = '';
   if (!sel.length) return;
-  const ul = document.createElement('ul'); for (const i of sel) { const li = document.createElement('li'); li.textContent = `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n} · $${cant[i.id] * i.p}`; ul.append(li); }
+  const ul = document.createElement('ul'); for (const i of sel) { const li = document.createElement('li'); li.textContent = `${qty[i.id]} ${qty[i.id] > 1 ? i.pl : i.n} · $${qty[i.id] * i.p}`; ul.append(li); }
   const d = document.createElement('div'); d.textContent = `Total de lista: $${total}` + ($('demo').checked ? ' (ilustrativo) · se cobra $0.01' : '');
-  const lim = document.createElement('button'); lim.type = 'button'; lim.textContent = 'Vaciar'; lim.onclick = () => { cant = {}; pintaAg(); };
+  const lim = document.createElement('button'); lim.type = 'button'; lim.textContent = 'Vaciar'; lim.onclick = () => { qty = {}; paintAgent(); };
   r.append(ul, d, lim);
-  $('concepto').value = (sel.map((i) => `${cant[i.id]} ${cant[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
-  $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); pintaReco();
+  $('concepto').value = (sel.map((i) => `${qty[i.id]} ${qty[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
+  $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); paintReco();
 }
-$('agbtn').onclick = () => { const p = proponer($('agtxt').value); if (p.noEntendido) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } cant = p.cant; pintaAg(); };
+$('agbtn').onclick = () => { const p = propose($('agtxt').value); if (p.notUnderstood) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } qty = p.qty; paintAgent(); };
 $('agtxt').onkeydown = (e) => { if (e.key === 'Enter') $('agbtn').click(); };
-$('demo').onchange = pintaAg; pintaAg();
-muestra(); pantalla(); pintaReco(); refrescar(); setInterval(refrescar, 2000); setInterval(pintaDetalle, 1000);
+$('demo').onchange = paintAgent; paintAgent();
+show(); keepAwake(); paintReco(); refresh(); setInterval(refresh, 2000); setInterval(paintDetail, 1000);
 </script>
 </body>
 </html>
