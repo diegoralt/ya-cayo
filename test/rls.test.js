@@ -116,3 +116,12 @@ test('default privileges: a table created later is NOT exposed to anon or authen
     assert.deepEqual({ ...p }, { anon_read: false, auth_write: false });
   } finally { await admin.unsafe('DROP TABLE public.future_table'); }
 });
+
+test('default privileges: a function created later is NOT executable by anon or authenticated (PUBLIC EXECUTE revoked)', async () => {
+  await admin.unsafe('CREATE FUNCTION public.future_fn() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$');
+  try {
+    const [p] = await admin`SELECT has_function_privilege('anon','public.future_fn()','EXECUTE') anon_exec,
+      has_function_privilege('authenticated','public.future_fn()','EXECUTE') auth_exec`;
+    assert.deepEqual({ ...p }, { anon_exec: false, auth_exec: false });
+  } finally { await admin.unsafe('DROP FUNCTION public.future_fn()'); }
+});
