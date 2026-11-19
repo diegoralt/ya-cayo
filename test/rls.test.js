@@ -107,3 +107,12 @@ test('server role: SELECT/INSERT/UPDATE/DELETE succeed on all tables', async () 
     throw new Error('rollback'); // leaves no data
   }).catch((e) => assert.equal(e.message, 'rollback', e.message));
 });
+
+test('default privileges: a table created later is NOT exposed to anon or authenticated (S2)', async () => {
+  await admin.unsafe('CREATE TABLE public.future_table (id int)');
+  try {
+    const [p] = await admin`SELECT has_table_privilege('anon','public.future_table','SELECT') anon_read,
+      has_table_privilege('authenticated','public.future_table','INSERT') auth_write`;
+    assert.deepEqual({ ...p }, { anon_read: false, auth_write: false });
+  } finally { await admin.unsafe('DROP TABLE public.future_table'); }
+});
