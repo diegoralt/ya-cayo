@@ -3,11 +3,10 @@
 > Punto de retomada corto. El detalle largo sigue en `.claude/ESTADO.md` (nombre viejo; migrarlo a este archivo en la rama `chore/english-names`, pendiente de que Diego lo autorice).
 
 ## Siguiente acción
-Cerrar la cadena de PRs apilados (squash; PRs en español con la skill `pr-description`). Falta el **#8** (`feat/english-naming`).
-1. Rondas 1 y 2 de la fase 4 (Codex, high): 0 P0/P1 y 5 P2 en total, todos arreglados y subidos. Falta la ronda 3 (última del tope) sobre el commit de los arreglos de la ronda 2.
-2. **Fase 4 (compuerta antes de mergear el #8):** ronda 3 con `~/.claude/skills/medium-change/pre-push-review.sh --target main --change docs/changes/2026-11-15-hosting-vercel --effort high` (tope 3 rondas; el informe sale en `.claude/reviews/<sha>.md`, ignorado por git). Al cerrar, copiar los informes a `docs/changes/2026-11-15-hosting-vercel/` con sufijo Codex y anotar en `despliegue.md` que la compuerta de H9 se cumplió después.
-3. Atender a Codex en el #8 (arreglo + prueba + respuesta + resolver hilo) y mergear con `has_unresolved_findings:false`.
-4. Tras el merge: `branch-close`, y **redesplegar Production solo con aprobación de Diego**.
+1. Mergear el #8 (squash, `has_unresolved_findings:false`) y correr `branch-close`. La fase 4 está cumplida (3 rondas) y registrada en `despliegue.md`.
+2. PR aparte para el P2 diferido: migración nueva que revoque `EXECUTE` de `PUBLIC` en funciones futuras + prueba en `test/rls.test.js`. Aplicarla en Supabase solo con aprobación de Diego.
+3. **Redesplegar Production solo con aprobación de Diego** (el código desplegado es previo a los fixes).
+4. Luego, en este orden: migración de `.claude/` a nombres en inglés (`chore/english-names`); después `verification:`, `agents-contract: v1` + `docs/agentes.md`, `decision-review:`, `integration:`/`main-branch:` y regla de idioma en CLAUDE.md; al final allowlist y `repos.tsv`. Todo solo cuando Diego lo pida.
 
 ## Decisiones abiertas
 - Hobby (no comercial) aceptado y declarado por Diego (18-nov). `statement_timeout` por rol en Supabase: no incluido, a decidir.
@@ -20,4 +19,4 @@ Cerrar la cadena de PRs apilados (squash; PRs en español con la skill `pr-descr
 - Rotar el PIN después del 14-dic.
 
 ## En curso en esta rama (`feat/english-naming`)
-Arreglos de las rondas 1 y 2 subidos; `node --test` 89/89. Pendiente: ronda 3, atender a Codex en el #8 y merge.
+Fase 4 cerrada; listo para merge.
