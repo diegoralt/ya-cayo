@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newDb } from './helpers/pg.js';
 import { countDeliveries, deliver } from '../src/core.js';
-import { readSqlite, importToPg, verify, ensayo, checkTarget, loadSource, PROD_REF } from '../scripts/migrar-sqlite-a-pg.js';
+import { readSqlite, importToPg, verify, rehearsal, checkTarget, loadSource, PROD_REF } from '../scripts/migrate-sqlite-to-pg.js';
 
 const OLD_DDL = `
   CREATE TABLE ordenes (id INTEGER PRIMARY KEY, concepto TEXT NOT NULL, monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
@@ -98,14 +98,14 @@ test('an unknown status in SQLite stops the migration (fail closed)', () => {
   assert.throws(() => readSqlite(path), /unknown status/);
 });
 
-test('ensayo(): the full rehearsal passes on the fixture, leaves the source untouched and refuses a SQLite with a -wal file', async () => {
+test('rehearsal(): the full rehearsal passes on the fixture, leaves the source untouched and refuses a SQLite with a -wal file', async () => {
   const path = fixture();
   const logs = [];
-  const r = await ensayo(path, (l) => logs.push(l));
+  const r = await rehearsal(path, (l) => logs.push(l));
   assert.deepEqual(r.counts, { orders: 5, transactions: 6, records: 2, events: 2, deliveries: 2 });
   assert.equal(logs.filter((l) => l.startsWith('ok')).length, 7);
   writeFileSync(`${path}-wal`, '');
-  await assert.rejects(() => ensayo(path, () => {}), /-wal/);
+  await assert.rejects(() => rehearsal(path, () => {}), /-wal/);
 });
 
 test('real-run guards: only the production pooler, and only the copy whose sha256 was approved', () => {

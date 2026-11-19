@@ -1,8 +1,8 @@
 // Migrates the old SQLite (Spanish names) to Postgres (English names; dictionary in
 // supabase/migrations/20261117000000_english_names.sql). NON-destructive: INSERT … ON CONFLICT DO NOTHING only
 // (never DELETE/TRUNCATE), so it can be repeated and never overwrites facts created in Postgres afterwards.
-// H8a: `node scripts/migrar-sqlite-a-pg.js --ensayo [--sqlite ruta]` rehearses everything on a throwaway local database.
-// H8b real run (Diego's approval right before): `--aplicar --sqlite COPY --sha256 HASH` imports into production, `--verificar` (strict) compares.
+// H8a: `node scripts/migrate-sqlite-to-pg.js --rehearsal [--sqlite path]` rehearses everything on a throwaway local database.
+// H8b real run (Diego's approval right before): `--apply --sqlite COPY --sha256 HASH` imports into production, `--verify` (strict) compares.
 // Both read DATABASE_URL_ADMIN (Supabase session pooler :5432, administrator: ya_cayo_app has no setval) from the environment; verify uses DATABASE_URL_APP if set.
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
@@ -106,17 +106,17 @@ export async function verify(db, { rows, agg }, { extra = false } = {}) {
 }
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
-const must = (cond, msg) => { if (!cond) throw new Error(`ensayo: ${msg}`); };
+const must = (cond, msg) => { if (!cond) throw new Error(`rehearsal: ${msg}`); };
 
 // Full rehearsal on a throwaway local database cloned from the migrated template (scripts/pg-test.sh). Throws on any failure.
-export async function ensayo(sqlitePath, log = console.log) {
+export async function rehearsal(sqlitePath, log = console.log) {
   if (!process.env.DATABASE_URL_TEST_ADMIN && existsSync('.pg-test.env')) process.loadEnvFile('.pg-test.env');
   const { DATABASE_URL_TEST: APP, DATABASE_URL_TEST_ADMIN: ADMIN } = process.env;
   must(APP && ADMIN, 'missing DATABASE_URL_TEST(_ADMIN): run `sh scripts/pg-test.sh` (Docker running)');
   for (const u of [APP, ADMIN]) must(['127.0.0.1', 'localhost'].includes(new URL(u).hostname), 'the rehearsal only runs against local Postgres');
   must(!existsSync(`${sqlitePath}-wal`), 'the SQLite has a -wal file: a plain copy would miss data (stop the writer and checkpoint first)');
 
-  const dir = mkdtempSync(join(tmpdir(), 'ya-cayo-ensayo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'ya-cayo-rehearsal-'));
   const copy = join(dir, 'backup.sqlite');
   const before = sha(sqlitePath);
   copyFileSync(sqlitePath, copy);
@@ -125,7 +125,7 @@ export async function ensayo(sqlitePath, log = console.log) {
   const src = readSqlite(copy);
   const counts = Object.fromEntries(Object.entries(src.rows).map(([t, l]) => [t, l.length]));
 
-  const name = `ensayo_${randomBytes(4).toString('hex')}`;
+  const name = `rehearsal_${randomBytes(4).toString('hex')}`;
   const admin = postgres(ADMIN, { max: 1, onnotice: () => {}, connect_timeout: 5 });
   await admin.unsafe(`CREATE DATABASE ${name} TEMPLATE ya_cayo_tpl`);
   const u = new URL(APP); u.pathname = `/${name}`;
@@ -194,9 +194,9 @@ export function loadSource(path, expectedSha) {
 
 async function main(args) {
   const arg = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
-  if (args.includes('--ensayo')) { const r = await ensayo(arg('--sqlite') ?? './ya-cayo.sqlite'); return console.log('ENSAYO OK', JSON.stringify(r.counts)); }
-  const aplicar = args.includes('--aplicar');
-  if (!aplicar && !args.includes('--verificar')) throw new Error('usage: --ensayo | --aplicar --sqlite COPY --sha256 HASH | --verificar --sqlite COPY --sha256 HASH [--extra]');
+  if (args.includes('--rehearsal')) { const r = await rehearsal(arg('--sqlite') ?? './ya-cayo.sqlite'); return console.log('ENSAYO OK', JSON.stringify(r.counts)); }
+  const apply = args.includes('--apply');
+  if (!apply && !args.includes('--verify')) throw new Error('usage: --rehearsal | --apply --sqlite COPY --sha256 HASH | --verify --sqlite COPY --sha256 HASH [--extra]');
   const admin = process.env.DATABASE_URL_ADMIN;
   if (!admin) throw new Error('missing DATABASE_URL_ADMIN (session pooler :5432, administrator)');
   checkTarget(admin, 5432);
@@ -207,7 +207,7 @@ async function main(args) {
   if (appUrl) checkTarget(appUrl, [5432, 6543]); // production runs the session pooler (5432); 6543 stays valid
   const app = appUrl ? openDb(appUrl) : adm;
   try {
-    if (aplicar) console.log('inserted', JSON.stringify(await importToPg(adm, src)), 'of', JSON.stringify(counts));
+    if (apply) console.log('inserted', JSON.stringify(await importToPg(adm, src)), 'of', JSON.stringify(counts));
     const diffs = await verify(app, src, { extra: args.includes('--extra') });
     if (diffs.length) throw new Error(`VERIFY FAILED:\n${diffs.join('\n')}`);
     console.log('VERIFY OK', JSON.stringify(counts), `(as ${appUrl ? 'ya_cayo_app' : 'administrator'})`);
