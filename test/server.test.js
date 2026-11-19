@@ -288,3 +288,10 @@ test('body already consumed by the runtime (Vercel helpers): explicit 500, never
   assert.equal((await db`SELECT count(*) n FROM events`)[0].n, 0);
   srv.close();
 });
+
+test('caja.html: the propose button reads the English result fields (regression: qty/notUnderstood)', () => {
+  const html = readFileSync(new URL('../public/caja.html', import.meta.url), 'utf8');
+  assert.match(html, /p\.notUnderstood/);
+  assert.match(html, /qty = p\.qty;/);
+  assert.doesNotMatch(html, /p\.noEntendido|p\.cant\b/);
+});

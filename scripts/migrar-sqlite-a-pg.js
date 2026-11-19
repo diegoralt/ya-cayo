@@ -177,10 +177,10 @@ export async function ensayo(sqlitePath, log = console.log) {
 
 export const PROD_REF = 'uogquzsxfwpnzrywwsvt';
 // Pure guard: the real run only talks to the production Supabase pooler (never localhost, never another project).
-export function checkTarget(url, port) {
+export function checkTarget(url, ports) {
   const u = new URL(url);
-  const ok = u.hostname.endsWith('.pooler.supabase.com') && decodeURIComponent(u.username).endsWith(`.${PROD_REF}`) && u.port === String(port);
-  if (!ok) throw new Error(`target is not the production pooler (*.pooler.supabase.com:${port}, user *.${PROD_REF})`);
+  const ok = u.hostname.endsWith('.pooler.supabase.com') && decodeURIComponent(u.username).endsWith(`.${PROD_REF}`) && [].concat(ports).map(String).includes(u.port);
+  if (!ok) throw new Error(`target is not the production pooler (*.pooler.supabase.com:${[].concat(ports).join('|')}, user *.${PROD_REF})`);
 }
 
 // The copy must be exactly the one whose hash Diego saw: same sha256, no -wal.
@@ -203,7 +203,7 @@ async function main(args) {
   const counts = Object.fromEntries(Object.entries(src.rows).map(([t, l]) => [t, l.length]));
   const adm = openDb(admin, { max: 1 });
   const appUrl = process.env.DATABASE_URL_APP;
-  if (appUrl) checkTarget(appUrl, 6543);
+  if (appUrl) checkTarget(appUrl, [5432, 6543]); // production runs the session pooler (5432); 6543 stays valid
   const app = appUrl ? openDb(appUrl) : adm;
   try {
     if (aplicar) console.log('inserted', JSON.stringify(await importToPg(adm, src)), 'of', JSON.stringify(counts));

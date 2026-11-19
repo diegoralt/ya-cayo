@@ -3,11 +3,11 @@
 > Punto de retomada corto. El detalle largo sigue en `.claude/ESTADO.md` (nombre viejo; migrarlo a este archivo en la rama `chore/english-names`, pendiente de que Diego lo autorice).
 
 ## Siguiente acción
-Cerrar la cadena de PRs apilados (merge con squash; historial lineal en main; PRs en español con la skill `pr-description`). Los #3–#7 ya están integrados; falta el **#8** (`feat/english-naming`, H7–H10 + renombrado a inglés).
-1. Aprobar el commit que porta a nombres en inglés los arreglos de Codex de H4–H6 (en esta rama quedaron fuera del rebase), barrido, `git push --force-with-lease` y `@codex review` en el #8.
-2. **Fase 4 antes de mergear el #8:** `~/.claude/skills/medium-change/pre-push-review.sh --destino main --esfuerzo high` (tope 3 rondas) sobre `main...feat/english-naming`; informes en `docs/changes/2026-11-15-hosting-vercel/` y anotar en `despliegue.md` que la compuerta de H9 se cumplió después.
+Cerrar la cadena de PRs apilados (squash; PRs en español con la skill `pr-description`). Falta el **#8** (`feat/english-naming`).
+1. Esperar el OK de Diego para commitear los arreglos de la ronda 1 de la fase 4 (2 P2 de Codex: `public/caja.html` leía nombres viejos; `scripts/migrar-sqlite-a-pg.js` rechazaba el puerto 5432 en `DATABASE_URL_APP`). Ya están hechos y probados, sin commitear. Luego: barrido, `git push --force-with-lease`.
+2. **Fase 4 (compuerta antes de mergear el #8):** ronda 2 con `~/.claude/skills/medium-change/pre-push-review.sh --target main --change docs/changes/2026-11-15-hosting-vercel --effort high` (tope 3 rondas; el informe sale en `.claude/reviews/<sha>.md`, ignorado por git). Al cerrar, copiar los informes a `docs/changes/2026-11-15-hosting-vercel/` con sufijo Codex y anotar en `despliegue.md` que la compuerta de H9 se cumplió después.
 3. Atender a Codex en el #8 (arreglo + prueba + respuesta + resolver hilo) y mergear con `has_unresolved_findings:false`.
-4. Tras el merge: `branch-close`, y **redesplegar Production solo con aprobación de Diego** (incluye los fixes de `attempt`, límites y cuerpo consumido).
+4. Tras el merge: `branch-close`, y **redesplegar Production solo con aprobación de Diego**.
 
 ## Decisiones abiertas
 - Hobby (no comercial) aceptado y declarado por Diego (18-nov). `statement_timeout` por rol en Supabase: no incluido, a decidir.
@@ -20,4 +20,4 @@ Cerrar la cadena de PRs apilados (merge con squash; historial lineal en main; PR
 - Rotar el PIN después del 14-dic.
 
 ## En curso en esta rama (`feat/english-naming`)
-Rama rebasada sobre `main` (17 commits) con el port de los arreglos de Codex a inglés sin commitear: `src/core.js`, `src/reconciliation.js`, `src/server.js` y sus pruebas. `node --test` 87/87 en verde.
+Port de los arreglos de H4-H6 ya subido; la ronda 1 de la fase 4 (0 P0/P1, 2 P2) tiene arreglo local sin commitear. `node --test` 88/88.

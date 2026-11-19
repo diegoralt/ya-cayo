@@ -112,6 +112,7 @@ test('real-run guards: only the production pooler, and only the copy whose sha25
   const ok = `postgresql://postgres.${PROD_REF}:pw@aws-0-us-east-1.pooler.supabase.com:5432/postgres`;
   checkTarget(ok, 5432);
   checkTarget(ok.replace(':5432', ':6543').replace('postgres.', 'ya_cayo_app.'), 6543);
+  checkTarget(ok.replace('postgres.', 'ya_cayo_app.'), [5432, 6543]); // app connection on the session pooler
   for (const bad of [ok.replace('aws-0-us-east-1.pooler.supabase.com', 'localhost'), ok.replace(PROD_REF, 'otherref'), ok.replace(':5432', ':6543')])
     assert.throws(() => checkTarget(bad, 5432), /production pooler/);
   const path = fixture();

@@ -283,7 +283,7 @@ function paintAgent() {
   $('concepto').value = (sel.map((i) => `${qty[i.id]} ${qty[i.id] > 1 ? i.pl : i.n}`).join(', ')).slice(0, 100).toLowerCase().replace(/^./, (x) => x.toUpperCase());
   $('monto').value = $('demo').checked ? '0.01' : String(Math.min(total, 50)); paintReco();
 }
-$('agbtn').onclick = () => { const p = propose($('agtxt').value); if (p.noEntendido) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } qty = p.cant; paintAgent(); };
+$('agbtn').onclick = () => { const p = propose($('agtxt').value); if (p.notUnderstood) { $('agres').textContent = 'No entendí qué cobrar. Prueba con «dos cafés y un pan» o usa el menú.'; return; } qty = p.qty; paintAgent(); };
 $('agtxt').onkeydown = (e) => { if (e.key === 'Enter') $('agbtn').click(); };
 $('demo').onchange = paintAgent; paintAgent();
 show(); keepAwake(); paintReco(); refresh(); setInterval(refresh, 2000); setInterval(paintDetail, 1000);
