@@ -162,3 +162,16 @@ test('reintento del mismo intento por HTTP: misma orden y mismo QR, sin duplicar
   assert.equal((await s.crear(1, { intento: 'otro-intento-4' })).status, 409);
   s.cerrar();
 });
+
+test('reintento de un intento atascado (sin qr_id) con el tope lleno: 409, no crea un cuarto QR vivo', async () => {
+  const s = await arrancar();
+  await db_atascado(s.db);
+  for (const i of ['v-intento-1', 'v-intento-2', 'v-intento-3']) await s.crear(1, { intento: i });
+  assert.equal((await s.crear(1, { intento: 'atascado-1' })).status, 409);
+  assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
+  s.cerrar();
+});
+async function db_atascado(db) {
+  const t = ahora();
+  await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 100}, ${t + 260}, 'tok-atascado', 'atascado-1', ${t - 100})`;
+}

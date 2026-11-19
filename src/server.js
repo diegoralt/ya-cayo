@@ -93,7 +93,7 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         if (centavos > TOPE_CENTAVOS) return json(res, 400, { error: 'tope de la demo: $50' });
         if (b.metodo === 'otro') { await registrarOtroMetodo(db, concepto, centavos); return json(res, 201, { registrado: true }); }
         const intento = /^[\w-]{8,64}$/.test(b.intento ?? '') ? b.intento : randomUUID(); // clave estable del cobro: el reintento no duplica el QR
-        const previa = (await db`SELECT 1 FROM ordenes WHERE intento=${intento}`).length > 0;
+        const previa = (await db`SELECT 1 FROM ordenes WHERE intento=${intento} AND qr_id IS NOT NULL`).length > 0; // solo se exime al reintento que ya tiene QR; el atascado (sin qr_id) volverá a crear uno y debe pasar el tope
         if (!previa && (await cobrosVivos(db)) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
         const r = await crearOrden(db, pey, { concepto, montoCentavos: centavos, intento }); // el monto lo fija el servidor en el QR
         if (r.creando) return json(res, 409, { error: 'el cobro se está creando; vuelve a pulsar Cobrar en unos segundos' });
