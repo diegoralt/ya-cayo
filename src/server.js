@@ -24,7 +24,9 @@ const SEGURIDAD = {
 const json = (res, codigo, obj) => res.writeHead(codigo, { 'content-type': 'application/json' }).end(JSON.stringify(obj));
 const iguales = (a = '', b = '') => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
+// Si el runtime (p. ej. los helpers de Vercel) ya consumió el cuerpo, leerlo daría '' en silencio: se falla fuerte (500) en vez de aceptar un cuerpo vacío.
 async function leer(req) {
+  if (req.body !== undefined || req.readableEnded) throw Object.assign(new Error('cuerpo ya consumido por el runtime (¿helpers de Vercel activos? NODEJS_HELPERS=0)'), { codigo: 500 });
   const trozos = [];
   let tam = 0;
   for await (const c of req) {
@@ -108,6 +110,7 @@ export function crearHandler({ db, pey, secret, pin, titular = '[titular por dec
       return res.writeHead(404).end();
     } catch (e) {
       if (e.codigo === 413) return res.writeHead(413).end();
+      if (e.codigo === 500) { console.error('error:', e.message); return json(res, 500, { error: 'error de configuración del servidor' }); }
       console.error('error:', e?.message); // nunca el cuerpo ni credenciales
       return json(res, e instanceof SyntaxError ? 400 : 502, { error: e instanceof SyntaxError ? 'JSON inválido' : 'error al hablar con pey' });
     }

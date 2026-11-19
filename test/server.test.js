@@ -273,3 +273,17 @@ test('crearHandler funciona sin servidor propio (como en Vercel) y no sirve pág
   assert.deepEqual(destino, { '/': '/caja.html', '/pagar/:token': '/pagar.html', '/api/:path*': '/api/index', '/webhook': '/api/index', '/health': '/api/index' });
   assert.ok(v.headers[0].headers.some((h) => h.key === 'content-security-policy'));
 });
+
+test('cuerpo ya consumido por el runtime (helpers de Vercel): 500 explícito, nunca un cuerpo vacío aceptado', async () => {
+  const { db } = await nuevaDb();
+  const h = crearHandler({ db, pey: {}, secret: 'x', pin: PIN });
+  const srv = createServer((req, res) => { req.body = {}; return h(req, res); }); // simula req.body ya poblado
+  await new Promise((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  const post = (ruta, cuerpo) => fetch(b + ruta, { method: 'POST', headers: { 'x-pin': PIN, 'content-type': 'application/json' }, body: cuerpo });
+  assert.equal((await post('/webhook', '{"a":1}')).status, 500);
+  assert.equal((await post('/api/ordenes', JSON.stringify({ concepto: 't', monto: 1 }))).status, 500);
+  assert.equal((await db`SELECT count(*) n FROM ordenes`)[0].n, 0);
+  assert.equal((await db`SELECT count(*) n FROM eventos`)[0].n, 0);
+  srv.close();
+});
