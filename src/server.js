@@ -72,7 +72,7 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       // La IP solo se toma de la cabecera que Vercel sobrescribe; fuera de Vercel cualquier cabecera es falsificable: se usa el socket.
       const ip = (enVercel && req.headers['x-vercel-forwarded-for']?.split(',')[0].trim()) || req.socket.remoteAddress, ahora_ = ahora();
       const f = await contarFallo(db, ip, VENTANA_S, ahora_); // reserva el intento antes de verificar el PIN
-      if (f.n > MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.hasta - ahora_) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
+      if (f.n > MAX_FALLOS) { await devolverIntento(db, ip, ahora_); return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.hasta - ahora_) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' })); } // el rechazado no verifica nada (no da más intentos) y libera su reserva: así los aciertos concurrentes no dejan el contador pegado
       if (!iguales(req.headers['x-pin'], pin)) return json(res, 401, { error: 'PIN incorrecto' });
       await devolverIntento(db, ip, ahora_); // PIN bueno: no cuenta como fallo
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });

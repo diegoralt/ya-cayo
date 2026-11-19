@@ -192,6 +192,19 @@ test('PIN: ráfaga de 20 intentos malos simultáneos: 10 reciben 401 y 10 recibe
   s.cerrar();
 });
 
+test('PIN: aciertos concurrentes con 9 fallos previos no dejan el contador pegado; los rechazados liberan su reserva', async () => {
+  const s = await arrancar();
+  for (let i = 0; i < 9; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 401);
+  const r = await Promise.all(Array.from({ length: 5 }, () => s.f('/api/metricas')));
+  assert.ok(r.every((x) => x.status === 200 || x.status === 429));
+  assert.equal(Number((await s.db`SELECT valor FROM limites WHERE clave LIKE 'pin:%'`)[0].valor), 9);
+  assert.equal((await s.f('/api/metricas')).status, 200);
+  assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 401); // el 10.º fallo sigue contando
+  for (let i = 0; i < 3; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 429);
+  assert.equal(Number((await s.db`SELECT valor FROM limites WHERE clave LIKE 'pin:%'`)[0].valor), 10);
+  s.cerrar();
+});
+
 test('PIN bueno no consume intentos: más de 10 aciertos seguidos no bloquean', async () => {
   const s = await arrancar();
   for (let i = 0; i < 15; i++) assert.equal((await s.f('/api/metricas')).status, 200);
