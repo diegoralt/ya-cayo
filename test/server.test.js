@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nuevaDb } from './helpers/pg.js';
-import { ahora, crearOrden, vista } from '../src/core.js';
+import { ahora, crearOrden, vista, contarFallo, devolverIntento } from '../src/core.js';
 import { crearServidor } from '../src/server.js';
 
 const PIN = '1234';
@@ -203,6 +203,17 @@ test('PIN: aciertos concurrentes con 9 fallos previos no dejan el contador pegad
   for (let i = 0; i < 3; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 429);
   assert.equal(Number((await s.db`SELECT valor FROM limites WHERE clave LIKE 'pin:%'`)[0].valor), 10);
   s.cerrar();
+});
+
+test('devolverIntento solo resta en la ventana que emitió la reserva', async () => {
+  const { db } = await nuevaDb();
+  const a = await contarFallo(db, 'ip-x', 60, 100); // ventana 1: vence en 160
+  const b = await contarFallo(db, 'ip-x', 60, 160); // ventana 2 (reinicia): n=1, vence en 220
+  assert.equal(b.n, 1);
+  await devolverIntento(db, 'ip-x', a.hasta); // reembolso tardío de la ventana 1: no debe tocar la 2
+  assert.equal((await contarFallo(db, 'ip-x', 60, 161)).n, 2);
+  await devolverIntento(db, 'ip-x', b.hasta);
+  assert.equal((await contarFallo(db, 'ip-x', 60, 162)).n, 2);
 });
 
 test('PIN bueno no consume intentos: más de 10 aciertos seguidos no bloquean', async () => {

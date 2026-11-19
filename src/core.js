@@ -154,8 +154,8 @@ export async function contarFallo(db, ip, ventana, now = ahora()) {
   return { n: Number(r.valor), hasta: Number(r.vence_en) };
 }
 // Se reserva el intento ANTES de verificar el PIN (así las ráfagas no pasan todas bajo el tope); si el PIN era bueno, se devuelve.
-export async function devolverIntento(db, ip, now = ahora()) {
-  await db`UPDATE limites SET valor = GREATEST(valor - 1, 0) WHERE clave=${`pin:${ip}`} AND vence_en>${now}`;
+export async function devolverIntento(db, ip, hasta) {
+  await db`UPDATE limites SET valor = GREATEST(valor - 1, 0) WHERE clave=${`pin:${ip}`} AND vence_en=${hasta}`; // solo la ventana que emitió la reserva
 }
 
 // Reserva atómica con vencimiento: true solo para quien la toma (la fila bloquea a los demás hasta `vence_en`).
