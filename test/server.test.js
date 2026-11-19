@@ -1,19 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nuevaDb } from './helpers/pg.js';
-import { ahora, crearOrden, vista } from '../src/core.js';
+import { ahora, crearOrden, vista, contarFallo, devolverIntento } from '../src/core.js';
 import { crearServidor } from '../src/server.js';
 
 const PIN = '1234';
-async function arrancar(txs = []) {
-  const { db } = await nuevaDb();
+async function arrancar(txs = [], { db: dada, ...opc } = {}) {
+  const db = dada ?? (await nuevaDb()).db;
   let n = 0;
   const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async (qrId) => (typeof txs === 'function' ? txs(qrId) : txs) };
-  const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba' });
+  const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba', ...opc });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
-  const f = async (ruta, { pin = PIN, ...init } = {}) => {
-    const r = await fetch(base + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json' } });
+  const f = async (ruta, { pin = PIN, headers = {}, ...init } = {}) => {
+    const r = await fetch(base + ruta, { ...init, headers: { 'x-pin': pin, 'content-type': 'application/json', ...headers } });
     return { status: r.status, body: await r.json().catch(() => null) };
   };
   const crear = (monto = 0.01, extra = {}) => f('/api/ordenes', { method: 'POST', body: JSON.stringify({ concepto: 't', monto, ...extra }) });
@@ -163,15 +163,96 @@ test('reintento del mismo intento por HTTP: misma orden y mismo QR, sin duplicar
   s.cerrar();
 });
 
-test('reintento de un intento atascado (sin qr_id) con el tope lleno: 409, no crea un cuarto QR vivo', async () => {
+test('intento atascado (sin qr_id): cuenta como cobro vivo y su reintento se completa sin superar el tope', async () => {
   const s = await arrancar();
   await db_atascado(s.db);
-  for (const i of ['v-intento-1', 'v-intento-2', 'v-intento-3']) await s.crear(1, { intento: i });
-  assert.equal((await s.crear(1, { intento: 'atascado-1' })).status, 409);
+  for (const i of ['v-intento-1', 'v-intento-2']) assert.equal((await s.crear(1, { intento: i })).status, 201);
+  assert.equal((await s.crear(1, { intento: 'v-intento-3' })).status, 409); // 2 + el atascado = 3
+  await s.db`UPDATE ordenes SET creando_desde = creando_desde - 100 WHERE intento='atascado-1'`; // pasado el plazo de relevo
+  assert.equal((await s.crear(1, { intento: 'atascado-1' })).status, 201);
   assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
   s.cerrar();
 });
+test('intento atascado ya vencido: no cuenta, y su reintento con el cupo lleno recibe 409 sin revivirlo', async () => {
+  const s = await arrancar();
+  const t = ahora();
+  await s.db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 900}, ${t - 500}, 'tok-venc', 'vencido-1', ${t - 900})`;
+  for (const i of ['w-intento-1', 'w-intento-2', 'w-intento-3']) assert.equal((await s.crear(1, { intento: i })).status, 201);
+  assert.equal((await s.crear(1, { intento: 'vencido-1' })).status, 409);
+  assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
+  assert.ok((await s.db`SELECT expira_en FROM ordenes WHERE intento='vencido-1'`)[0].expira_en < t);
+  s.cerrar();
+});
+
+test('PIN: ráfaga de 20 intentos malos simultáneos: 10 reciben 401 y 10 reciben 429', async () => {
+  const s = await arrancar();
+  const r = await Promise.all(Array.from({ length: 20 }, () => s.f('/api/metricas', { pin: 'mal' })));
+  assert.equal(r.filter((x) => x.status === 401).length, 10);
+  assert.equal(r.filter((x) => x.status === 429).length, 10);
+  s.cerrar();
+});
+
+test('PIN: aciertos concurrentes con 9 fallos previos no dejan el contador pegado; los rechazados liberan su reserva', async () => {
+  const s = await arrancar();
+  for (let i = 0; i < 9; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 401);
+  const r = await Promise.all(Array.from({ length: 5 }, () => s.f('/api/metricas')));
+  assert.ok(r.every((x) => x.status === 200 || x.status === 429));
+  assert.equal(Number((await s.db`SELECT valor FROM limites WHERE clave LIKE 'pin:%'`)[0].valor), 9);
+  assert.equal((await s.f('/api/metricas')).status, 200);
+  assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 401); // el 10.º fallo sigue contando
+  for (let i = 0; i < 3; i++) assert.equal((await s.f('/api/metricas', { pin: 'mal' })).status, 429);
+  assert.equal(Number((await s.db`SELECT valor FROM limites WHERE clave LIKE 'pin:%'`)[0].valor), 10);
+  s.cerrar();
+});
+
+test('devolverIntento solo resta en la ventana que emitió la reserva', async () => {
+  const { db } = await nuevaDb();
+  const a = await contarFallo(db, 'ip-x', 60, 100); // ventana 1: vence en 160
+  const b = await contarFallo(db, 'ip-x', 60, 160); // ventana 2 (reinicia): n=1, vence en 220
+  assert.equal(b.n, 1);
+  await devolverIntento(db, 'ip-x', a.hasta); // reembolso tardío de la ventana 1: no debe tocar la 2
+  assert.equal((await contarFallo(db, 'ip-x', 60, 161)).n, 2);
+  await devolverIntento(db, 'ip-x', b.hasta);
+  assert.equal((await contarFallo(db, 'ip-x', 60, 162)).n, 2);
+});
+
+test('PIN bueno no consume intentos: más de 10 aciertos seguidos no bloquean', async () => {
+  const s = await arrancar();
+  for (let i = 0; i < 15; i++) assert.equal((await s.f('/api/metricas')).status, 200);
+  s.cerrar();
+});
+
 async function db_atascado(db) {
   const t = ahora();
   await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 100}, ${t + 260}, 'tok-atascado', 'atascado-1', ${t - 100})`;
 }
+
+test('4 POST simultáneos con intentos distintos: a lo sumo 3 vivos (cupo atómico en la BD)', async () => {
+  const s = await arrancar();
+  const r = await Promise.all([1, 2, 3, 4].map((i) => s.crear(1, { intento: `simultaneo-${i}` })));
+  assert.deepEqual(r.map((x) => x.status).sort(), [201, 201, 201, 409]);
+  assert.equal((await s.f('/api/ordenes')).body.length, 3);
+  s.cerrar();
+});
+
+test('PIN: el contador vive en la BD; dos instancias lo comparten y una cabecera falsa no evade el límite', async () => {
+  const { db, abrir } = await nuevaDb();
+  const a = await arrancar([], { db }), b = await arrancar([], { db: abrir() });
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await a.f('/api/metricas', { pin: 'mal', headers: { 'x-vercel-forwarded-for': `9.9.9.${i}` } })).status, 401);
+    assert.equal((await b.f('/api/metricas', { pin: 'mal', headers: { 'x-forwarded-for': `8.8.8.${i}` } })).status, 401);
+  }
+  const r = await b.f('/api/metricas'); // enVercel=false: la cabecera se ignora y es la misma IP
+  assert.equal(r.status, 429);
+  assert.equal((await a.f('/api/metricas')).status, 429);
+  a.cerrar(); b.cerrar();
+});
+
+test('PIN en Vercel: el límite es por IP de la cabecera de Vercel, no global', async () => {
+  const s = await arrancar([], { enVercel: true });
+  const h = (ip) => ({ 'x-vercel-forwarded-for': ip });
+  for (let i = 0; i < 10; i++) await s.f('/api/metricas', { pin: 'mal', headers: h('1.1.1.1') });
+  assert.equal((await s.f('/api/metricas', { headers: h('1.1.1.1') })).status, 429);
+  assert.equal((await s.f('/api/metricas', { headers: h('2.2.2.2') })).status, 200);
+  s.cerrar();
+});
