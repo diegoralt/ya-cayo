@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb, ahora } from '../src/core.js';
+import { nuevaDb } from './helpers/pg.js';
+import { ahora } from '../src/core.js';
 import { crearServidor } from '../src/server.js';
 
 const PIN = '1234';
 async function arrancar(txs = []) {
-  const db = openDb();
+  const { db } = await nuevaDb();
   let n = 0;
   const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async () => txs };
   const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba' });
@@ -80,20 +81,20 @@ test('flujo: pago confirmado por conciliación, entregar una vez, métricas con 
   assert.equal(m.maxEntregasPorOrden, 1);
   assert.equal(m.comisionEvitadaCentavos, 3); // 3% de 100 centavos
   assert.ok(m.segundosCobro >= 0);
-  assert.ok(s.db.prepare('SELECT pagada_en FROM ordenes').get().pagada_en);
+  assert.ok((await s.db`SELECT pagada_en FROM ordenes`)[0].pagada_en);
   s.cerrar();
 });
 
 test('error de pey: 502 genérico sin filtrar detalle y sin dejar orden', async () => {
   const s = await arrancar();
   s.srv.close();
-  const db = openDb();
+  const { db } = await nuevaDb();
   const srv = crearServidor({ db, pey: { createQr: async () => { throw new Error('secreto-interno'); } }, secret: 'x', pin: PIN });
   await new Promise((r) => srv.listen(0, r));
   const r = await fetch(`http://127.0.0.1:${srv.address().port}/api/ordenes`, { method: 'POST', headers: { 'x-pin': PIN }, body: JSON.stringify({ concepto: 't', monto: 1 }) });
   assert.equal(r.status, 502);
   assert.ok(!(await r.text()).includes('secreto-interno'));
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM ordenes').get().n, 0);
+  assert.equal((await db`SELECT COUNT(*) n FROM ordenes`)[0].n, 0);
   srv.close();
 });
 

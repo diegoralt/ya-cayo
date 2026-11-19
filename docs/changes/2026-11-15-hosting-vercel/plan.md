@@ -22,7 +22,7 @@ Hoy: `node src/server.js` + SQLite local (`node:sqlite`, síncrono, `BEGIN IMMED
 
 ## Hitos
 - [x] H1 `scripts/pg-test.sh` + migración de esquema con RLS/grants; test de denegación `anon`/`authenticated` y acceso del rol servidor · valida: `sh scripts/pg-test.sh && node --test test/rls.test.js`
-- [ ] H2 `core.js` async + restricciones/bloqueos + consumidores y wrapper de servidor adaptados; las 27 pruebas portadas verdes (`core`, `webhook`, `pey`, `server`) + concurrencia con conexiones independientes · valida: `node --test`
+- [x] H2 `core.js` async + restricciones/bloqueos + consumidores y wrapper de servidor adaptados; las 27 pruebas portadas verdes (`core`, `webhook`, `pey`, `server`) + concurrencia con conexiones independientes · valida: `node --test`
 - [ ] H3 Conciliación al consultar (ventana 30 min, reserva atómica, pendiente durable), webhook recibido/procesado, sin `setInterval` · valida: `node --test test/webhook.test.js test/conciliacion.test.js`
 - [ ] H4 QR recuperable + timeouts de pey (+ experimento real de idempotencia con $0.01, documentado) · valida: `node --test test/qr.test.js`
 - [ ] H5 Límites atómicos (PIN por IP de Vercel, cupo de 3 vivos) · valida: `node --test test/server.test.js`

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
-import { openDb, crearOrden, conciliar, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
+import { abrirDb, crearOrden, conciliar, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
 import { manejarWebhook, iniciarPolling } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
 
@@ -47,7 +47,7 @@ const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacci
 
 export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03 }) {
   const fallos = new Map(); // ponytail: en memoria, una instancia; sin limpieza (pocas IPs). Con varios procesos, pasar a Redis.
-  const porToken = (t) => db.prepare('SELECT id FROM ordenes WHERE token=?').get(t)?.id;
+  const porToken = async (t) => (await db`SELECT id FROM ordenes WHERE token=${t}`)[0]?.id;
   const srv = createServer(async (req, res) => {
     for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v);
     try {
@@ -64,8 +64,8 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       // Pagador: sin PIN, por token no adivinable.
       const mv = ruta.match(/^\/api\/pago\/([\w-]+)$/);
       if (req.method === 'GET' && mv) {
-        const id = porToken(mv[1]);
-        return id ? json(res, 200, vistaPublica(vista(db, id), titular)) : json(res, 404, { error: 'no existe' });
+        const id = await porToken(mv[1]);
+        return id ? json(res, 200, vistaPublica(await vista(db, id), titular)) : json(res, 404, { error: 'no existe' });
       }
       if (!ruta.startsWith('/api/')) return res.writeHead(404).end();
 
@@ -76,10 +76,10 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!f || f.hasta <= ahora) fallos.set(ip, (f = { n: 0, hasta: ahora + VENTANA_MS }));
       if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.ceil((f.hasta - ahora) / 1000) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
       if (!iguales(req.headers['x-pin'], pin)) { f.n++; return json(res, 401, { error: 'PIN incorrecto' }); }
-      if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...metricas(db, comision), comision });
+      if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
-        const ids = db.prepare('SELECT id FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20').all();
-        return json(res, 200, ids.map(({ id }) => vistaCaja(vista(db, id))));
+        const ids = await db`SELECT id FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
+        return json(res, 200, await Promise.all(ids.map(async ({ id }) => vistaCaja(await vista(db, id)))));
       }
       if (req.method === 'POST' && ruta === '/api/ordenes') {
         const b = JSON.parse((await leer(req)) || '{}');
@@ -87,19 +87,19 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         const concepto = String(b.concepto ?? '').trim().slice(0, 100);
         if (!concepto || !Number.isFinite(centavos) || centavos < 1) return json(res, 400, { error: 'concepto y monto > 0' });
         if (centavos > TOPE_CENTAVOS) return json(res, 400, { error: 'tope de la demo: $50' });
-        if (b.metodo === 'otro') { registrarOtroMetodo(db, concepto, centavos); return json(res, 201, { registrado: true }); }
-        if (cobrosVivos(db) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
+        if (b.metodo === 'otro') { await registrarOtroMetodo(db, concepto, centavos); return json(res, 201, { registrado: true }); }
+        if ((await cobrosVivos(db)) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
         const { id } = await crearOrden(db, pey, { concepto, montoCentavos: centavos }); // el monto lo fija el servidor en el QR
-        return json(res, 201, vistaCaja(vista(db, id)));
+        return json(res, 201, vistaCaja(await vista(db, id)));
       }
       const mo = ruta.match(/^\/api\/ordenes\/(\d+)(?:\/(entregar|conciliar))?$/);
       if (mo) {
         const id = Number(mo[1]);
-        const v = vista(db, id);
+        const v = await vista(db, id);
         if (!v) return json(res, 404, { error: 'no existe' });
         if (req.method === 'GET' && !mo[2]) return json(res, 200, vistaCaja(v));
-        if (req.method === 'POST' && mo[2] === 'entregar') return json(res, 200, { ...entregar(db, id), orden: vistaCaja(vista(db, id)) });
-        if (req.method === 'POST' && mo[2] === 'conciliar') { const r = await conciliar(db, pey, id); return json(res, 200, { ok: r.ok, orden: vistaCaja(vista(db, id)) }); }
+        if (req.method === 'POST' && mo[2] === 'entregar') return json(res, 200, { ...(await entregar(db, id)), orden: vistaCaja(await vista(db, id)) });
+        if (req.method === 'POST' && mo[2] === 'conciliar') { const r = await conciliar(db, pey, id); return json(res, 200, { ok: r.ok, orden: vistaCaja(await vista(db, id)) }); }
       }
       return res.writeHead(404).end();
     } catch (e) {
@@ -117,7 +117,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const pin = process.env.DEMO_PIN;
   if (!secret) throw new Error('falta PEY_WEBHOOK_SECRET');
   if (!pin) throw new Error('falta DEMO_PIN');
-  const db = openDb(process.env.DB_PATH ?? './ya-cayo.sqlite');
+  const db = abrirDb(process.env.DATABASE_URL);
   const pey = crearClientePey();
   iniciarPolling({ db, pey });
   const port = Number(process.env.PORT ?? 8787);
