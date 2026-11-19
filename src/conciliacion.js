@@ -6,7 +6,8 @@ const { Webhook } = sw;
 
 export const VENTANA_POST = 1800; // 30 min tras vencer para descubrir pagos tardíos o segundos pagos
 export const MAX_POR_CONSULTA = 5; // órdenes que una sola consulta puede conciliar; el resto toca en la siguiente
-export const ARRENDAMIENTO = 5; // segundos que dura la reserva de un intento antes de saber si salió bien
+export const ARRENDAMIENTO = 30; // reserva mientras el intento corre: cubre el peor caso de pey, para que otra consulta no se solape
+export const REINTENTO = 5; // si el intento falla, la reserva se acorta a esto; un proceso cortado retiene el arrendamiento completo
 export const PRESUPUESTO_MS = 8000; // tope de espera por consulta; lo que no termine queda «pendiente» y se retoma
 
 // Conciliar dejando rastro durable: «pendiente» desde antes de llamar a pey hasta que termina bien.
@@ -50,21 +51,23 @@ export const intervalo = (o, now) => (o.estado === 'pendiente' && now <= o.expir
 
 // Concilia las órdenes a las que les toca (misma ventana que antes), con reserva atómica compartida entre instancias.
 // Presupuesto total por consulta: tope de órdenes y de espera; un fallo o corte deja la orden «pendiente».
-export async function conciliarAlConsultar(db, pey, ordenes, { now = ahora(), log = console.error } = {}) {
+export async function conciliarAlConsultar(db, pey, ordenes, { now = ahora(), log = console.error, presupuestoMs = PRESUPUESTO_MS } = {}) {
   const candidatas = ordenes.filter((o) => enVentana(o, now));
   if (!candidatas.length) return;
+  const limite = Date.now() + presupuestoMs; // el plazo corre desde antes de reservar: las reservas también cuentan
   const tomadas = [];
   for (const o of candidatas) {
-    if (tomadas.length >= MAX_POR_CONSULTA) break;
-    if (await reservar(db, `conc:${o.id}`, ARRENDAMIENTO, now)) tomadas.push(o); // reserva corta: si algo falla o se corta, se reintenta pronto
+    if (tomadas.length >= MAX_POR_CONSULTA || Date.now() >= limite) break;
+    if (await reservar(db, `conc:${o.id}`, ARRENDAMIENTO, now)) tomadas.push(o);
   }
+  // Solo si la reserva sigue siendo nuestra (mismo vencimiento) se acorta o se extiende: no pisa la de otra instancia.
+  const reajustar = (o, seg) => db`UPDATE limites SET vence_en=${now + seg} WHERE clave=${`conc:${o.id}`} AND vence_en=${now + ARRENDAMIENTO}`;
   const trabajo = Promise.allSettled(tomadas.map(async (o) => {
     const r = await conciliarMarcando(db, pey, o.id, now);
-    if (!r.ok) return log(`conciliar orden ${o.id}: ${r.error}`);
-    const espera = intervalo(o, now); // éxito: se extiende la reserva al intervalo normal de la orden
-    if (espera > ARRENDAMIENTO) await db`UPDATE limites SET vence_en=${now + espera} WHERE clave=${`conc:${o.id}`}`;
+    if (!r.ok) { log(`conciliar orden ${o.id}: ${r.error}`); return reajustar(o, REINTENTO); }
+    return reajustar(o, intervalo(o, now)); // éxito: la reserva pasa al intervalo normal de la orden
   }));
   let t;
-  await Promise.race([trabajo, new Promise((r) => { t = setTimeout(r, PRESUPUESTO_MS); })]);
+  await Promise.race([trabajo, new Promise((r) => { t = setTimeout(r, Math.max(0, limite - Date.now())); })]);
   clearTimeout(t);
 }

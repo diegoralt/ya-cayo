@@ -113,7 +113,30 @@ test('corte a media conciliación: el pendiente y la reserva sobreviven y otra i
   assert.ok(Date.now() - t0 < 5000);
   assert.equal((await db`SELECT 1 FROM conciliacion_pendiente WHERE orden_id=${id}`).length, 1);
   const p = pey([pago('T1')]);
-  await conciliarAlConsultar(abrir(), p, ordenes, { now: T0 + 7, ...silencio }); // otra instancia, vencida la reserva
-  assert.equal((await vista(db, id, T0 + 7)).estado, 'pagada');
+  await conciliarAlConsultar(abrir(), p, ordenes, { now: T0 + 7, ...silencio });
+  assert.equal(p.consultas, 0); // la reserva del intento cortado aún vale (ARRENDAMIENTO)
+  await conciliarAlConsultar(abrir(), p, ordenes, { now: T0 + 32, ...silencio }); // otra instancia, vencida la reserva
+  assert.equal((await vista(db, id, T0 + 32)).estado, 'pagada');
   assert.equal((await db`SELECT 1 FROM conciliacion_pendiente WHERE orden_id=${id}`).length, 0);
+});
+
+test('una consulta lenta a pey conserva la reserva: otra lectura 6 s después no se solapa', async () => {
+  const { db } = await nuevaDb();
+  const lenta = pey([], { demora: 300 });
+  await crearOrden(db, lenta, { concepto: 't', montoCentavos: 1, now: T0 });
+  const ordenes = await filas(db);
+  const primera = conciliarAlConsultar(db, lenta, ordenes, { now: T0 + 1, ...silencio });
+  await new Promise((r) => setTimeout(r, 100)); // la primera sigue esperando a pey
+  await conciliarAlConsultar(db, lenta, ordenes, { now: T0 + 7, ...silencio }); // más de 5 s después, pero el intento no terminó
+  assert.equal(lenta.consultas, 1);
+  await primera;
+});
+
+test('el presupuesto cuenta desde antes de reservar: sin tiempo no se toma ninguna reserva ni se consulta a pey', async () => {
+  const { db } = await nuevaDb();
+  const p = pey([]);
+  await crearOrden(db, p, { concepto: 't', montoCentavos: 1, now: T0 });
+  await conciliarAlConsultar(db, p, await filas(db), { now: T0 + 1, presupuestoMs: 0, ...silencio });
+  assert.equal(p.consultas, 0);
+  assert.equal((await db`SELECT 1 FROM limites WHERE clave LIKE 'conc:%'`).length, 0);
 });

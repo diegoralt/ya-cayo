@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { abrirDb, crearOrden, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
-import { manejarWebhook, conciliarAlConsultar, conciliarMarcando } from './conciliacion.js';
+import { manejarWebhook, conciliarAlConsultar, conciliarMarcando, VENTANA_POST } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
 
 const MAX_CUERPO = 64 * 1024;
@@ -79,8 +79,10 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!iguales(req.headers['x-pin'], pin)) { f.n++; return json(res, 401, { error: 'PIN incorrecto' }); }
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
-        const ids = await db`SELECT id, qr_id, estado, expira_en FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
-        await conciliarAlConsultar(db, pey, [...ids]);
+        // Candidatas a conciliar: toda orden dentro de la ventana, no solo las 20 que se muestran.
+        const candidatas = await db`SELECT id, qr_id, estado, expira_en FROM ordenes WHERE qr_id IS NOT NULL AND expira_en + ${VENTANA_POST} >= ${Math.floor(Date.now() / 1000)} ORDER BY id DESC`;
+        await conciliarAlConsultar(db, pey, [...candidatas]);
+        const ids = await db`SELECT id FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
         return json(res, 200, await Promise.all(ids.map(async ({ id }) => vistaCaja(await vista(db, id)))));
       }
       if (req.method === 'POST' && ruta === '/api/ordenes') {
