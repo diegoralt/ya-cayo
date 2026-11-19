@@ -15,18 +15,42 @@ export function abrirDb(url, opts = {}) {
   return postgres(url, { prepare: false, max: 1, idle_timeout: 20, connect_timeout: 10, onnotice: () => {}, types, ...opts });
 }
 
-// pey: { createQr({amountCents, concept, expiration, numRef}) -> {id}, listQrTransactions(qrId) -> [{id,status,amountCents,currency,datePaid}] }
-export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, now = ahora() }) {
-  const [{ id }] = await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token)
-    VALUES (${concepto}, ${montoCentavos}, ${now}, ${now + ttl}, ${randomUUID()}) RETURNING id`;
+export const PLAZO_CREANDO = 30; // s: un intento sin qr_id más viejo que esto se da por atascado (pey tarda ≤15 s por llamada)
+const qrDe = (o) => ({ id: o.qr_id, qrString: o.qr_string, qrImage: o.qr_image });
+
+// Idempotencia propia (pey no la ofrece: experimento-pey.md). `intento` lo genera el cliente y es único en la BD.
+// Solo quien gana el INSERT (o el relevo de un intento atascado) llama a pey; un QR cuya respuesta se perdió es
+// inalcanzable (nadie lo vio ni se puede consultar), así que recrear es seguro. El guardado es «gana el primero».
+// pey: { createQr({amountCents, concept, expiration, numRef, metadata}) -> {id,qrString,qrImage}, listQrTransactions(qrId) -> [{id,status,amountCents,currency,datePaid}] }
+// Devuelve { id, qr } (nuevo o ya existente: reutilizada) o { id, creando: true } si otro lo está creando.
+export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, now = ahora(), intento = randomUUID() }) {
+  let id, c = concepto, m = montoCentavos;
+  const [nueva] = await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde)
+    VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${intento}, ${now}) ON CONFLICT (intento) DO NOTHING RETURNING id`;
+  if (nueva) id = nueva.id;
+  else {
+    const [o] = await db`SELECT id, concepto, monto_centavos, qr_id, qr_string, qr_image FROM ordenes WHERE intento=${intento}`;
+    if (!o) return crearOrden(db, pey, { concepto, montoCentavos, ttl, now, intento }); // la borró un error de pey entre medias
+    if (o.qr_id) return { id: o.id, qr: qrDe(o), reutilizada: true };
+    const [r] = await db`UPDATE ordenes SET creando_desde=${now}, expira_en=${now + ttl}
+      WHERE id=${o.id} AND qr_id IS NULL AND creando_desde <= ${now - PLAZO_CREANDO} RETURNING id`;
+    if (!r) return { id: o.id, creando: true }; // otro la está creando (o ya la tomó el relevo)
+    id = o.id; c = o.concepto; m = o.monto_centavos; // el relevo usa lo guardado, no lo que mande el reintento
+  }
+  let qr;
   try {
-    const qr = await pey.createQr({ amountCents: montoCentavos, concept: concepto, expiration: ttl, numRef: String(id % 10_000_000) });
-    await db`UPDATE ordenes SET qr_id=${String(qr.id)}, qr_string=${qr.qrString ?? null}, qr_image=${qr.qrImage ?? null} WHERE id=${id}`;
-    return { id, qr };
+    qr = await pey.createQr({ amountCents: m, concept: c, expiration: ttl, numRef: String(id % 10_000_000), metadata: { intento } });
   } catch (e) {
-    await db`DELETE FROM ordenes WHERE id=${id}`;
+    await db`DELETE FROM ordenes WHERE id=${id} AND qr_id IS NULL AND creando_desde=${now}`;
     throw e;
   }
+  const [g] = await db`UPDATE ordenes SET qr_id=${String(qr.id)}, qr_string=${qr.qrString ?? null}, qr_image=${qr.qrImage ?? null}, creando_desde=NULL
+    WHERE id=${id} AND qr_id IS NULL AND creando_desde=${now} RETURNING id`; // creando_desde=now: si otro relevó, este QR ya no es el vigente (su expira_en no coincidiría)
+  if (g) return { id, qr };
+  const [o] = await db`SELECT qr_id, qr_string, qr_image FROM ordenes WHERE id=${id}`; // otro guardó antes: se descarta el nuestro
+  if (!o) throw new Error('la orden desapareció durante la creación');
+  if (!o.qr_id) return { id, creando: true }; // relevada y aún sin guardar: el relevo la termina
+  return { id, qr: qrDe(o), reutilizada: true };
 }
 
 // Aplica transacciones ya consultadas. Nunca degrada ni reabre una orden; solo añade hechos.

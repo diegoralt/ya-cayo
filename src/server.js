@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { abrirDb, crearOrden, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
 import { manejarWebhook, conciliarAlConsultar, conciliarMarcando, VENTANA_POST } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
@@ -92,9 +92,12 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         if (!concepto || !Number.isFinite(centavos) || centavos < 1) return json(res, 400, { error: 'concepto y monto > 0' });
         if (centavos > TOPE_CENTAVOS) return json(res, 400, { error: 'tope de la demo: $50' });
         if (b.metodo === 'otro') { await registrarOtroMetodo(db, concepto, centavos); return json(res, 201, { registrado: true }); }
-        if ((await cobrosVivos(db)) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
-        const { id } = await crearOrden(db, pey, { concepto, montoCentavos: centavos }); // el monto lo fija el servidor en el QR
-        return json(res, 201, vistaCaja(await vista(db, id)));
+        const intento = /^[\w-]{8,64}$/.test(b.intento ?? '') ? b.intento : randomUUID(); // clave estable del cobro: el reintento no duplica el QR
+        const previa = (await db`SELECT 1 FROM ordenes WHERE intento=${intento} AND qr_id IS NOT NULL`).length > 0; // solo se exime al reintento que ya tiene QR; el atascado (sin qr_id) volverá a crear uno y debe pasar el tope
+        if (!previa && (await cobrosVivos(db)) >= MAX_VIVOS) return json(res, 409, { error: `máximo ${MAX_VIVOS} cobros vivos` });
+        const r = await crearOrden(db, pey, { concepto, montoCentavos: centavos, intento }); // el monto lo fija el servidor en el QR
+        if (r.creando) return json(res, 409, { error: 'el cobro se está creando; vuelve a pulsar Cobrar en unos segundos' });
+        return json(res, 201, vistaCaja(await vista(db, r.id)));
       }
       const mo = ruta.match(/^\/api\/ordenes\/(\d+)(?:\/(entregar|conciliar))?$/);
       if (mo) {

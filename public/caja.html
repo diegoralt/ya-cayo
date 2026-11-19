@@ -238,10 +238,14 @@ function pintaMetricas(m) {
 function pintaReco() { const c = Math.round(Number($('monto').value) * 100 * comision); $('evitada').textContent = Number.isFinite(c) ? '≈ ' + pesos(c) : '—'; $('supuesto').textContent = `(supuesto ${(comision * 100).toFixed(1)}%, configurable)`; }
 $('monto').oninput = pintaReco;
 
+let intento = null, intentoDe = ''; // un cobro = un intento: si falla o se corta, el reintento reutiliza la misma clave y no duplica el QR
 async function crear(metodo) {
   $('err').textContent = ''; $('cobrar').disabled = $('otro').disabled = true;
+  const clave = [$('concepto').value, $('monto').value, metodo].join('|');
+  if (!intento || intentoDe !== clave) { intento = crypto.randomUUID(); intentoDe = clave; }
   try {
-    const o = await api('/ordenes', { method: 'POST', body: JSON.stringify({ concepto: $('concepto').value, monto: $('monto').value, metodo }) });
+    const o = await api('/ordenes', { method: 'POST', body: JSON.stringify({ concepto: $('concepto').value, monto: $('monto').value, metodo, intento }) });
+    intento = null;
     if (!o.registrado) selId = o.id;
     await refrescar();
     if (!o.registrado) $('detalle').scrollIntoView({ block: 'start' }); // el QR es lo siguiente que el cajero necesita
