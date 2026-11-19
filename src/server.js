@@ -9,7 +9,7 @@ const MAX_CUERPO = 64 * 1024;
 export const TOPE_CENTAVOS = 5000; // demo: máx. $50
 export const MAX_VIVOS = 3;
 const MAX_FALLOS = 10, VENTANA_S = 60; // PIN: 10 fallos por minuto y por IP (contador en la BD, compartido entre instancias)
-// ponytail: solo estas dos páginas se sirven; nunca el directorio del repo ni la base.
+// Solo dev/tests: en Vercel las páginas son estáticas (vercel.json). Solo estas dos; nunca el directorio del repo.
 const pagina = (n) => readFileSync(new URL(`../public/${n}`, import.meta.url));
 
 // Cabeceras de defensa en todas las respuestas. CSP: sin recursos externos; los scripts y estilos inline de las páginas siguen permitidos.
@@ -24,7 +24,9 @@ const SEGURIDAD = {
 const json = (res, codigo, obj) => res.writeHead(codigo, { 'content-type': 'application/json' }).end(JSON.stringify(obj));
 const iguales = (a = '', b = '') => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
+// Si el runtime (p. ej. los helpers de Vercel) ya consumió el cuerpo, leerlo daría '' en silencio: se falla fuerte (500) en vez de aceptar un cuerpo vacío.
 async function leer(req) {
+  if (req.body !== undefined || req.readableEnded) throw Object.assign(new Error('cuerpo ya consumido por el runtime (¿helpers de Vercel activos? NODEJS_HELPERS=0)'), { codigo: 500 });
   const trozos = [];
   let tam = 0;
   for await (const c of req) {
@@ -44,9 +46,12 @@ function vistaPublica(v, titular) {
 }
 const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacciones.length });
 
-export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03, enVercel = !!process.env.VERCEL }) {
-  const srv = createServer(async (req, res) => {
-    for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v);
+const cabeceras = (res) => { for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v); };
+
+// handler(req, res) sin servidor propio: lo usa api/index.js en Vercel y crearServidor en dev/tests.
+export function crearHandler({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03, enVercel = !!process.env.VERCEL }) {
+  return async (req, res) => {
+    cabeceras(res);
     try {
       const url = new URL(req.url, 'http://x');
       const ruta = url.pathname;
@@ -55,9 +60,6 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         const codigo = await manejarWebhook({ db, pey, secret }, await leer(req), req.headers);
         return res.writeHead(codigo).end();
       }
-      if (req.method === 'GET' && ruta === '/') return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(pagina('caja.html'));
-      const mp = ruta.match(/^\/pagar\/([\w-]+)$/);
-      if (req.method === 'GET' && mp) return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(pagina('pagar.html'));
       // Pagador: sin PIN, por token no adivinable.
       const mv = ruta.match(/^\/api\/pago\/([\w-]+)$/);
       if (req.method === 'GET' && mv) {
@@ -108,9 +110,21 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       return res.writeHead(404).end();
     } catch (e) {
       if (e.codigo === 413) return res.writeHead(413).end();
+      if (e.codigo === 500) { console.error('error:', e.message); return json(res, 500, { error: 'error de configuración del servidor' }); }
       console.error('error:', e?.message); // nunca el cuerpo ni credenciales
       return json(res, e instanceof SyntaxError ? 400 : 502, { error: e instanceof SyntaxError ? 'JSON inválido' : 'error al hablar con pey' });
     }
+  };
+}
+
+export function crearServidor(opts) {
+  const handler = crearHandler(opts);
+  const html = (res, n) => { cabeceras(res); res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(pagina(n)); };
+  const srv = createServer((req, res) => {
+    const ruta = req.url.split('?')[0];
+    if (req.method === 'GET' && ruta === '/') return html(res, 'caja.html');
+    if (req.method === 'GET' && /^\/pagar\/[\w-]+$/.test(ruta)) return html(res, 'pagar.html');
+    return handler(req, res);
   });
   srv.headersTimeout = 10_000; srv.requestTimeout = 15_000; // ponytail: corta conexiones lentas (slowloris) si algo llega sin Cloudflare
   return srv;
