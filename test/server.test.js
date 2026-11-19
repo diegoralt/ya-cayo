@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nuevaDb } from './helpers/pg.js';
-import { ahora } from '../src/core.js';
+import { ahora, crearOrden, vista } from '../src/core.js';
 import { crearServidor } from '../src/server.js';
 
 const PIN = '1234';
 async function arrancar(txs = []) {
   const { db } = await nuevaDb();
   let n = 0;
-  const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async () => txs };
+  const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async (qrId) => (typeof txs === 'function' ? txs(qrId) : txs) };
   const srv = crearServidor({ db, pey, secret: 'x', pin: PIN, titular: 'Titular de prueba' });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
@@ -117,4 +117,34 @@ test('cabeceras de seguridad en caja, pagador y API', async () => {
     assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/, ruta);
   }
   s.cerrar();
+});
+
+test('GET del listado y GET del pagador concilian: un pago sin webhook se confirma al consultar', async () => {
+  const pago = [{ id: 'T1', status: 'PAID', amountCents: 100, currency: 'MXN', datePaid: ahora() + 2 }];
+  const a = await arrancar(pago);
+  const { body: o1 } = await a.crear(1);
+  const lista = (await a.f('/api/ordenes')).body;
+  assert.equal(lista.find((x) => x.id === o1.id).estado, 'pagada'); // listado de la caja
+  a.cerrar();
+  const b = await arrancar(pago);
+  const { body: o2 } = await b.crear(1);
+  const r = await fetch(`http://127.0.0.1:${b.srv.address().port}/api/pago/${o2.token}`); // página del pagador, sin PIN
+  assert.equal((await r.json()).estado, 'pagada');
+  b.cerrar();
+});
+
+test('el listado concilia también las órdenes más viejas que las 20 mostradas, mientras sigan en la ventana', async () => {
+  const s = await arrancar((qr) => (qr === 'Q1' ? [{ id: 'T1', status: 'PAID', amountCents: 100, currency: 'MXN', datePaid: ahora() + 2 }] : [])); // solo el QR de la vieja tiene pago
+  let k = 0;
+  const p = { createQr: async () => ({ id: `Q${++k}` }) };
+  const { id: viejo } = await crearOrden(s.db, p, { concepto: 'vieja', montoCentavos: 100 }); // la única que coincide con el pago
+  for (let i = 0; i < 21; i++) await crearOrden(s.db, p, { concepto: `t${i}`, montoCentavos: 1 });
+  for (let i = 0; i < 5; i++) await s.f('/api/ordenes'); // 22 candidatas, 5 por consulta
+  assert.equal((await vista(s.db, viejo)).estado, 'pagada'); // quedó fuera de las 20 mostradas
+  s.cerrar();
+});
+
+test('sin proceso de fondo: el módulo de conciliación ya no programa timers', async () => {
+  const mod = await import('../src/conciliacion.js');
+  assert.equal(mod.iniciarPolling, undefined);
 });

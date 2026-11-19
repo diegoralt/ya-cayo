@@ -97,8 +97,21 @@ export async function vista(db, ordenId, now = ahora()) {
   };
 }
 
+// Evento «recibido» (idempotente por webhook_id) vs «procesado»: un fallo deja procesado_en NULL y el reintento sí procesa.
 export async function registrarEvento(db, webhookId, now = ahora()) {
   return (await db`INSERT INTO eventos(webhook_id, recibido_en) VALUES (${webhookId}, ${now}) ON CONFLICT DO NOTHING`).count === 1;
+}
+export async function eventoProcesado(db, webhookId) {
+  return (await db`SELECT procesado_en FROM eventos WHERE webhook_id=${webhookId}`)[0]?.procesado_en != null;
+}
+export async function marcarProcesado(db, webhookId, now = ahora()) {
+  await db`UPDATE eventos SET procesado_en=${now} WHERE webhook_id=${webhookId} AND procesado_en IS NULL`;
+}
+
+// Reserva atómica con vencimiento: true solo para quien la toma (la fila bloquea a los demás hasta `vence_en`).
+export async function reservar(db, clave, ttl, now = ahora()) {
+  return (await db`INSERT INTO limites(clave, valor, vence_en) VALUES (${clave}, 1, ${now + ttl})
+    ON CONFLICT (clave) DO UPDATE SET valor=1, vence_en=${now + ttl} WHERE limites.vence_en <= ${now} RETURNING 1`).length === 1;
 }
 
 // Registro «tarjeta o efectivo»: no cobra, solo mide cuántos aceptan CoDi.

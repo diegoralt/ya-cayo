@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
-import { abrirDb, crearOrden, conciliar, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
-import { manejarWebhook, iniciarPolling } from './conciliacion.js';
+import { abrirDb, crearOrden, entregar, vista, cobrosVivos, registrarOtroMetodo, metricas } from './core.js';
+import { manejarWebhook, conciliarAlConsultar, conciliarMarcando, VENTANA_POST } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
 
 const MAX_CUERPO = 64 * 1024;
@@ -47,7 +47,6 @@ const vistaCaja = ({ transacciones, ...v }) => ({ ...v, transacciones: transacci
 
 export function crearServidor({ db, pey, secret, pin, titular = '[titular por declarar]', comision = 0.03 }) {
   const fallos = new Map(); // ponytail: en memoria, una instancia; sin limpieza (pocas IPs). Con varios procesos, pasar a Redis.
-  const porToken = async (t) => (await db`SELECT id FROM ordenes WHERE token=${t}`)[0]?.id;
   const srv = createServer(async (req, res) => {
     for (const [k, v] of Object.entries(SEGURIDAD)) res.setHeader(k, v);
     try {
@@ -64,7 +63,9 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       // Pagador: sin PIN, por token no adivinable.
       const mv = ruta.match(/^\/api\/pago\/([\w-]+)$/);
       if (req.method === 'GET' && mv) {
-        const id = await porToken(mv[1]);
+        const [o] = await db`SELECT id, qr_id, estado, expira_en FROM ordenes WHERE token=${mv[1]}`;
+        const id = o?.id;
+        if (o) await conciliarAlConsultar(db, pey, [o]); // respaldo del webhook sin proceso de fondo
         return id ? json(res, 200, vistaPublica(await vista(db, id), titular)) : json(res, 404, { error: 'no existe' });
       }
       if (!ruta.startsWith('/api/')) return res.writeHead(404).end();
@@ -78,6 +79,9 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       if (!iguales(req.headers['x-pin'], pin)) { f.n++; return json(res, 401, { error: 'PIN incorrecto' }); }
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
+        // Candidatas a conciliar: toda orden dentro de la ventana, no solo las 20 que se muestran.
+        const candidatas = await db`SELECT id, qr_id, estado, expira_en FROM ordenes WHERE qr_id IS NOT NULL AND expira_en + ${VENTANA_POST} >= ${Math.floor(Date.now() / 1000)} ORDER BY id DESC`;
+        await conciliarAlConsultar(db, pey, [...candidatas]);
         const ids = await db`SELECT id FROM ordenes WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
         return json(res, 200, await Promise.all(ids.map(async ({ id }) => vistaCaja(await vista(db, id)))));
       }
@@ -99,7 +103,7 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
         if (!v) return json(res, 404, { error: 'no existe' });
         if (req.method === 'GET' && !mo[2]) return json(res, 200, vistaCaja(v));
         if (req.method === 'POST' && mo[2] === 'entregar') return json(res, 200, { ...(await entregar(db, id)), orden: vistaCaja(await vista(db, id)) });
-        if (req.method === 'POST' && mo[2] === 'conciliar') { const r = await conciliar(db, pey, id); return json(res, 200, { ok: r.ok, orden: vistaCaja(await vista(db, id)) }); }
+        if (req.method === 'POST' && mo[2] === 'conciliar') { const r = await conciliarMarcando(db, pey, id); return json(res, 200, { ok: r.ok, orden: vistaCaja(await vista(db, id)) }); }
       }
       return res.writeHead(404).end();
     } catch (e) {
@@ -119,7 +123,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!pin) throw new Error('falta DEMO_PIN');
   const db = abrirDb(process.env.DATABASE_URL);
   const pey = crearClientePey();
-  iniciarPolling({ db, pey });
   const port = Number(process.env.PORT ?? 8787);
   const host = process.env.HOST ?? '127.0.0.1'; // solo el túnel local; nunca 0.0.0.0 salvo decisión explícita
   const comision = Number(process.env.COMISION_TARJETA ?? 0.03);
