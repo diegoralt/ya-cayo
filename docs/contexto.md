@@ -118,3 +118,6 @@ Decisiones del usuario: varios comercios, el comercio primero, adopción como fi
 - Docs de pey no publican IPs de origen, User-Agent, reintentos ni timeout. Observado: origen en AWS, `python-requests/2.32.3`.
 - **Cloudflare:** Bot Fight Mode (plan gratuito) desafía el POST de pey con 403 «Just a moment...»; no se puede saltar con reglas WAF/Page Rules (solo IP Access Rules, frágiles). Con el interruptor apagado llegó el 200. Estable: host fuera de ese bloqueo o Super Bot Fight Mode con Skip.
 - No publicar CLABE ni `trackingKey` (salen en el payload).
+
+## Hosting: Vercel Hobby (declarado el 18-nov-2026)
+La app corre en el plan Hobby de Vercel, que sus términos limitan a uso personal/no comercial. Es un prototipo de hackatón sin fines de lucro; Diego asume el riesgo de que Vercel lo pause (decisión del 18-nov). Revisar antes de cualquier uso con terceros que paguen. Fuente y detalle: `docs/changes/2026-11-15-hosting-vercel/buenas-practicas.md` (O2).

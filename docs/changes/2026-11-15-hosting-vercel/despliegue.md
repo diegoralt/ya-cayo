@@ -22,7 +22,7 @@ Fecha: 17/18-nov-2026. Rama `feat/english-naming` (commit `6c9c990`). Proyecto V
 Por el puerto 6543 con `max: 1`, varias consultas simultáneas en la misma conexión se colgaban (timeout a 15 s); con `max: 3` o por el puerto 5432 funcionan. `openDb` pasó a `max: 3` (`6c9c990`). Las pruebas locales (Postgres directo) no lo reproducen: la prueba real es la de 15 GET simultáneos de arriba.
 
 ## Notas
-- La conexión cliente→pooler usa TLS (`ssl: 'require'`). `pg_stat_ssl` marca `false` solo porque mide el tramo pooler→BD.
+- La conexión cliente→pooler usaba TLS en preview solo porque esa URL llevaba `sslmode=require`; la URL de Production (18-nov) no lo llevaba y `openDb` no pasaba `ssl`, así que iba **sin cifrar** (el pooler lo acepta). Corregido en código: `openDb` exige `ssl: 'require'` salvo localhost (`buenas-practicas.md` S1). `pg_stat_ssl` marca `false` porque mide el tramo pooler→BD.
 - Host directo `db.<ref>.supabase.co` solo IPv6: todo va por `aws-1-us-east-1.pooler.supabase.com`.
 - Un evento firmado sin orden ni `metadata.attempt` queda «recibido» sin procesar a propósito (la conciliación al consultar lo cubre).
 - El aviso de Node (`engines` 24.x sobre 26.x del proyecto) es inofensivo.
@@ -45,3 +45,9 @@ Por el puerto 6543 con `max: 1`, varias consultas simultáneas en la misma conex
 - **`--verificar` aparte** (administrador): OK, mismo conteo. SQLite original sin cambios (sha256 igual).
 - **Estado tras el corte:** PG es la fuente de verdad; el webhook de pey sigue apuntando al túnel viejo (servidor detenido) hasta H9. Los pagos del intervalo se confirman por conciliación al consultar (ventana de 30 min).
 - **Reversión:** PG sigue siendo la fuente; el importador es repetible y no pisa hechos nuevos de PG.
+
+## H9 · Hallazgos de la prueba de humo de Production (18-nov-2026)
+- Despliegue a Production con las 6 variables; `/`, `/pagar/x`, `/health` y rutas sin PIN responden bien. Con el PIN válido, `GET /api/orders` y luego `/api/metrics` se colgaron 300 s («Task timed out after 300 seconds»).
+- Causa: postgres.js hace *pipelining* y el pooler transaccional (6543) no lo soporta (documentado por Supabase). Primero se secuencializó `orderView` (`b2d007a`); una ráfaga de 15 GET simultáneos aún dejaba la instancia sin respuesta. En H7 no apareció porque la lista estaba vacía.
+- Prueba propia contra la BD (10 consultas y 6 transacciones en paralelo): 6543 por defecto y con `max_pipeline: 0` se cuelgan; 6543 con `max_pipeline: 1` y el modo sesión 5432 funcionan.
+- Decisión de Diego (18-nov): usar **modo sesión (5432)** y re-evaluar 6543 + `max_pipeline: 1` después. Más: TLS obligatorio, `query_timeout`/`queue_timeout`, `maxDuration` 30 s y migración de privilegios por defecto. Detalle y fuentes en `buenas-practicas.md`.

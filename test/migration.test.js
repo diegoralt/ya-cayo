@@ -122,3 +122,12 @@ test('real-run guards: only the production pooler, and only the copy whose sha25
   writeFileSync(`${path}-wal`, '');
   assert.throws(() => loadSource(path, hash), /-wal/);
 });
+
+test('openDb: TLS is required for remote hosts and off for local ones; query timeouts are set', async () => {
+  const { openDb } = await import('../src/core.js');
+  const remote = openDb('postgresql://u:p@aws-1-us-east-1.pooler.supabase.com:5432/postgres');
+  const local = openDb('postgresql://u:p@127.0.0.1:5432/postgres');
+  assert.equal(remote.options.ssl, 'require'); assert.equal(local.options.ssl, false);
+  assert.ok(remote.options.query_timeout > 0 && remote.options.queue_timeout > 0);
+  await Promise.all([remote.end({ timeout: 0 }), local.end({ timeout: 0 })]);
+});

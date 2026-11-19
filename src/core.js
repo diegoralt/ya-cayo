@@ -9,11 +9,15 @@ export const nowSec = () => Math.floor(Date.now() / 1000);
 const asNumber = { to: 0, from: [], serialize: String, parse: Number };
 const types = { bigint: { ...asNumber, to: 20, from: [20] }, numeric: { ...asNumber, to: 1700, from: [1700] } };
 
-// Behind Supabase's transaction pooler: prepare:false and few connections per instance. max must be > 1:
-// with max:1 on port 6543, concurrent queries pipelined on one connection hang (measured 17-nov, H7).
+// Pooler: use the SESSION pooler (:5432). On the transaction pooler (:6543) postgres.js pipelining hangs the pool
+// (Supabase docs; measured 18-nov, buenas-practicas.md B1); `max_pipeline: 1` is the verified alternative.
+// TLS is required for any remote host (S1); the local test Postgres has none.
+// query_timeout/queue_timeout turn a stuck query into a fast error instead of a 300 s function timeout (B2).
+const isLocal = (url) => ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(new URL(url).hostname);
 export function openDb(url, opts = {}) {
   if (!url) throw new Error('missing database URL');
-  return postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, onnotice: () => {}, types, ...opts });
+  return postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, query_timeout: 20, queue_timeout: 10,
+    ssl: isLocal(url) ? false : 'require', onnotice: () => {}, types, ...opts });
 }
 
 export const CREATING_TIMEOUT_S = 30; // an attempt with no qr_id older than this is considered stuck (pey takes ≤15 s per call)
