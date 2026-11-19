@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newDb } from './helpers/pg.js';
-import { nowSec } from '../src/core.js';
+import { nowSec, createOrder, orderView, countFailure, refundAttempt } from '../src/core.js';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createAppServer, createHandler } from '../src/server.js';
@@ -10,7 +10,7 @@ const PIN = '1234';
 async function start(txs = [], { db: dada, ...opc } = {}) {
   const db = dada ?? (await newDb()).db;
   let n = 0;
-  const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async () => txs };
+  const pey = { createQr: async () => ({ id: `QR${++n}`, qrString: 'cadena', qrImage: 'AAAA' }), listQrTransactions: async (qrId) => (typeof txs === 'function' ? txs(qrId) : txs) };
   const srv = createAppServer({ db, pey, secret: 'x', pin: PIN, holder: 'Titular de prueba', ...opc });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
@@ -197,4 +197,94 @@ test('createHandler works without its own server (as on Vercel) and does not ser
   const destino = Object.fromEntries(v.rewrites.map((r) => [r.source, r.destination]));
   assert.deepEqual(destino, { '/': '/caja.html', '/pagar/:token': '/pagar.html', '/api/:path*': '/api/index', '/webhook': '/api/index', '/health': '/api/index' });
   assert.ok(v.headers[0].headers.some((h) => h.key === 'content-security-policy'));
+});
+
+test('the list also reconciles orders older than the 20 shown, while they are still in the window', async () => {
+  const s = await start((qr) => (qr === 'Q1' ? [{ id: 'T1', status: 'PAID', amountCents: 100, currency: 'MXN', datePaid: nowSec() + 2 }] : [])); // only the old one's QR has a payment
+  let k = 0;
+  const p = { createQr: async () => ({ id: `Q${++k}` }) };
+  const { id: old } = await createOrder(s.db, p, { concept: 'old', amountCents: 100 }); // the only one matching the payment
+  for (let i = 0; i < 21; i++) await createOrder(s.db, p, { concept: `t${i}`, amountCents: 1 });
+  for (let i = 0; i < 5; i++) await s.f('/api/orders'); // 22 candidates, 5 per read
+  assert.equal((await orderView(s.db, old)).status, 'paid'); // it fell outside the 20 shown
+  s.close();
+});
+
+async function stuckAttempt(db) {
+  const t = nowSec();
+  await db`INSERT INTO orders(concept, amount_cents, created_at, expires_at, token, attempt, creating_since) VALUES ('t', 100, ${t - 100}, ${t + 260}, 'tok-stuck', 'stuck-attempt-1', ${t - 100})`;
+}
+
+test('stuck attempt (no qr_id): counts as a live charge and its retry completes without exceeding the cap', async () => {
+  const s = await start();
+  await stuckAttempt(s.db);
+  for (const i of ['v-attempt-1', 'v-attempt-2']) assert.equal((await s.create(1, { attempt: i })).status, 201);
+  assert.equal((await s.create(1, { attempt: 'v-attempt-3' })).status, 409); // 2 + the stuck one = 3
+  await s.db`UPDATE orders SET creating_since = creating_since - 100 WHERE attempt='stuck-attempt-1'`; // past the takeover timeout
+  assert.equal((await s.create(1, { attempt: 'stuck-attempt-1' })).status, 201);
+  assert.equal((await s.db`SELECT count(*) n FROM orders WHERE qr_id IS NOT NULL`)[0].n, 3);
+  s.close();
+});
+
+test('stuck and already expired attempt: it does not count, and its retry with the quota full gets 409 without reviving it', async () => {
+  const s = await start();
+  const t = nowSec();
+  await s.db`INSERT INTO orders(concept, amount_cents, created_at, expires_at, token, attempt, creating_since) VALUES ('t', 100, ${t - 900}, ${t - 500}, 'tok-exp', 'expired-attempt-1', ${t - 900})`;
+  for (const i of ['w-attempt-1', 'w-attempt-2', 'w-attempt-3']) assert.equal((await s.create(1, { attempt: i })).status, 201);
+  assert.equal((await s.create(1, { attempt: 'expired-attempt-1' })).status, 409);
+  assert.equal((await s.db`SELECT count(*) n FROM orders WHERE qr_id IS NOT NULL`)[0].n, 3);
+  assert.ok((await s.db`SELECT expires_at FROM orders WHERE attempt='expired-attempt-1'`)[0].expires_at < t);
+  s.close();
+});
+
+test('PIN: a burst of 20 simultaneous bad attempts: 10 get 401 and 10 get 429', async () => {
+  const s = await start();
+  const r = await Promise.all(Array.from({ length: 20 }, () => s.f('/api/metrics', { pin: 'mal' })));
+  assert.equal(r.filter((x) => x.status === 401).length, 10);
+  assert.equal(r.filter((x) => x.status === 429).length, 10);
+  s.close();
+});
+
+test('PIN: concurrent successes after 9 failures do not pin the counter; rejected ones release their reservation', async () => {
+  const s = await start();
+  for (let i = 0; i < 9; i++) assert.equal((await s.f('/api/metrics', { pin: 'mal' })).status, 401);
+  const r = await Promise.all(Array.from({ length: 5 }, () => s.f('/api/metrics')));
+  assert.ok(r.every((x) => x.status === 200 || x.status === 429));
+  assert.equal(Number((await s.db`SELECT value FROM limits WHERE key LIKE 'pin:%'`)[0].value), 9);
+  assert.equal((await s.f('/api/metrics')).status, 200);
+  assert.equal((await s.f('/api/metrics', { pin: 'mal' })).status, 401); // the 10th failure still counts
+  for (let i = 0; i < 3; i++) assert.equal((await s.f('/api/metrics', { pin: 'mal' })).status, 429);
+  assert.equal(Number((await s.db`SELECT value FROM limits WHERE key LIKE 'pin:%'`)[0].value), 10);
+  s.close();
+});
+
+test('refundAttempt only subtracts in the window that issued the reservation', async () => {
+  const { db } = await newDb();
+  const a = await countFailure(db, 'ip-x', 60, 100); // window 1: expires at 160
+  const b = await countFailure(db, 'ip-x', 60, 160); // window 2 (resets): n=1, expires at 220
+  assert.equal(b.n, 1);
+  await refundAttempt(db, 'ip-x', a.until); // late refund from window 1: must not touch window 2
+  assert.equal((await countFailure(db, 'ip-x', 60, 161)).n, 2);
+  await refundAttempt(db, 'ip-x', b.until);
+  assert.equal((await countFailure(db, 'ip-x', 60, 162)).n, 2);
+});
+
+test('a good PIN consumes no attempts: more than 10 successes in a row do not block', async () => {
+  const s = await start();
+  for (let i = 0; i < 15; i++) assert.equal((await s.f('/api/metrics')).status, 200);
+  s.close();
+});
+
+test('body already consumed by the runtime (Vercel helpers): explicit 500, never an accepted empty body', async () => {
+  const { db } = await newDb();
+  const h = createHandler({ db, pey: {}, secret: 'x', pin: PIN });
+  const srv = createServer((req, res) => { req.body = {}; return h(req, res); }); // simulates a populated req.body
+  await new Promise((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  const post = (route, body) => fetch(b + route, { method: 'POST', headers: { 'x-pin': PIN, 'content-type': 'application/json' }, body });
+  assert.equal((await post('/webhook', '{"a":1}')).status, 500);
+  assert.equal((await post('/api/orders', JSON.stringify({ concept: 't', amount: 1 }))).status, 500);
+  assert.equal((await db`SELECT count(*) n FROM orders`)[0].n, 0);
+  assert.equal((await db`SELECT count(*) n FROM events`)[0].n, 0);
+  srv.close();
 });

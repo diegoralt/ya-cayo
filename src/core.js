@@ -31,26 +31,31 @@ const qrOf = (o) => ({ id: o.qr_id, qrString: o.qr_string, qrImage: o.qr_image }
 // or { full: true } if the live-order quota is exhausted.
 export async function createOrder(db, pey, { concept, amountCents, ttl = 360, now = nowSec(), attempt = randomUUID(), maxLive }) {
   let id, c = concept, m = amountCents;
-  // Atomic quota: the 'quota' row in limits serializes count + insert; an existing attempt does not consume quota.
-  const created = await db.begin(async (t) => {
+  // With a quota, count + insert + takeover run under the 'quota' row of limits (everything that leaves a live charge is serialized).
+  // An exempt attempt already occupies quota (live, counted in liveCharges) or already has a QR; an expired stuck one is claimed as new.
+  const step = async (q) => {
     if (maxLive) {
-      await t`INSERT INTO limits(key, value, expires_at) VALUES ('quota', 0, 0) ON CONFLICT (key) DO UPDATE SET value=limits.value`;
-      if (!(await t`SELECT 1 FROM orders WHERE attempt=${attempt}`).length && (await liveCharges(t, now)) >= maxLive) return 'full';
+      await q`INSERT INTO limits(key, value, expires_at) VALUES ('quota', 0, 0) ON CONFLICT (key) DO UPDATE SET value=limits.value`;
+      const exempt = (await q`SELECT 1 FROM orders WHERE attempt=${attempt} AND (qr_id IS NOT NULL OR (status='pending' AND expires_at>=${now}))`).length;
+      if (!exempt && (await liveCharges(q, now)) >= maxLive) return { full: true };
     }
-    return (await t`INSERT INTO orders(concept, amount_cents, created_at, expires_at, token, attempt, creating_since)
-      VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${attempt}, ${now}) ON CONFLICT (attempt) DO NOTHING RETURNING id`)[0];
-  });
-  if (created === 'full') return { full: true };
-  if (created) id = created.id;
-  else {
-    const [o] = await db`SELECT id, concept, amount_cents, qr_id, qr_string, qr_image FROM orders WHERE attempt=${attempt}`;
-    if (!o) return createOrder(db, pey, { concept, amountCents, ttl, now, attempt }); // deleted by a pey error in between
-    if (o.qr_id) return { id: o.id, qr: qrOf(o), reused: true };
-    const [r] = await db`UPDATE orders SET creating_since=${now}, expires_at=${now + ttl}
+    const [n] = await q`INSERT INTO orders(concept, amount_cents, created_at, expires_at, token, attempt, creating_since)
+      VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${attempt}, ${now}) ON CONFLICT (attempt) DO NOTHING RETURNING id`;
+    if (n) return { id: n.id };
+    const [o] = await q`SELECT id, concept, amount_cents, qr_id, qr_string, qr_image FROM orders WHERE attempt=${attempt}`;
+    if (!o) return { retry: true }; // deleted by a pey error in between
+    if (o.qr_id) return { existing: o };
+    const [r] = await q`UPDATE orders SET creating_since=${now}, expires_at=${now + ttl}
       WHERE id=${o.id} AND qr_id IS NULL AND creating_since <= ${now - CREATING_TIMEOUT_S} RETURNING id`;
-    if (!r) return { id: o.id, creating: true }; // someone else is creating it (or the takeover already happened)
-    id = o.id; c = o.concept; m = o.amount_cents; // the takeover uses what was stored, not what the retry sends
-  }
+    return r ? { id: o.id, takeover: o } : { id: o.id, creating: true }; // creating: someone else is creating it (or the takeover already happened)
+  };
+  const x = await (maxLive ? db.begin(step) : step(db));
+  if (x.full) return { full: true };
+  if (x.retry) return createOrder(db, pey, { concept, amountCents, ttl, now, attempt, maxLive });
+  if (x.existing) return { id: x.existing.id, qr: qrOf(x.existing), reused: true };
+  if (x.creating) return { id: x.id, creating: true };
+  id = x.id;
+  if (x.takeover) { c = x.takeover.concept; m = x.takeover.amount_cents; } // the takeover uses what was stored, not what the retry sends
   let qr;
   try {
     qr = await pey.createQr({ amountCents: m, concept: c, expiration: ttl, numRef: String(id % 10_000_000), metadata: { attempt } });
@@ -59,10 +64,11 @@ export async function createOrder(db, pey, { concept, amountCents, ttl = 360, no
     throw e;
   }
   const [g] = await db`UPDATE orders SET qr_id=${String(qr.id)}, qr_string=${qr.qrString ?? null}, qr_image=${qr.qrImage ?? null}, creating_since=NULL
-    WHERE id=${id} AND qr_id IS NULL RETURNING id`;
+    WHERE id=${id} AND qr_id IS NULL AND creating_since=${now} RETURNING id`; // creating_since=now: if someone took over, this QR is no longer the current one (its expires_at would not match)
   if (g) return { id, qr };
   const [o] = await db`SELECT qr_id, qr_string, qr_image FROM orders WHERE id=${id}`; // someone saved first: ours is discarded
-  if (!o?.qr_id) throw new Error('the order disappeared during creation');
+  if (!o) throw new Error('the order disappeared during creation');
+  if (!o.qr_id) return { id, creating: true }; // taken over and not saved yet: the takeover finishes it
   return { id, qr: qrOf(o), reused: true };
 }
 
@@ -145,7 +151,7 @@ export async function markProcessed(db, webhookId, now = nowSec()) {
   await db`UPDATE events SET processed_at=${now} WHERE webhook_id=${webhookId} AND processed_at IS NULL`;
 }
 
-// PIN by IP: n failures per window in limits. A single atomic upsert; returns the count and when the window ends.
+// PIN by IP: n attempts per window in limits. A single atomic upsert; returns the count (this one included) and when the window ends.
 export async function countFailure(db, ip, windowSec, now = nowSec()) {
   const [r] = await db`INSERT INTO limits(key, value, expires_at) VALUES (${`pin:${ip}`}, 1, ${now + windowSec})
     ON CONFLICT (key) DO UPDATE SET value = CASE WHEN limits.expires_at <= ${now} THEN 1 ELSE limits.value + 1 END,
@@ -153,9 +159,9 @@ export async function countFailure(db, ip, windowSec, now = nowSec()) {
     RETURNING value, expires_at`;
   return { n: Number(r.value), until: Number(r.expires_at) };
 }
-export async function pinFailures(db, ip, now = nowSec()) {
-  const [r] = await db`SELECT value, expires_at FROM limits WHERE key=${`pin:${ip}`} AND expires_at>${now}`;
-  return r ? { n: Number(r.value), until: Number(r.expires_at) } : { n: 0, until: 0 };
+// The attempt is reserved BEFORE checking the PIN (so bursts cannot all slip under the cap); if the PIN was good, it is given back.
+export async function refundAttempt(db, ip, until) {
+  await db`UPDATE limits SET value = GREATEST(value - 1, 0) WHERE key=${`pin:${ip}`} AND expires_at=${until}`; // only the window that issued the reservation
 }
 
 // Atomic reservation with expiry: true only for whoever takes it (the row blocks the rest until `expires_at`).

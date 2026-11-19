@@ -83,6 +83,26 @@ test('function dead after pey accepted: after the timeout the QR of the same ord
   assert.equal(await orders(db), 1);
 });
 
+test('a stuck creator that wakes up after the takeover but before it saves: does not win, and expires_at follows the current QR', async () => {
+  const { db, openConn } = await newDb();
+  const p = pey(); p.hang = true;
+  const first = createOrder(db, p, { ...base, attempt: 'i-8' });
+  await new Promise((r) => setTimeout(r, 100));
+  const q = pey(); q.hang = true;
+  const t2 = T0 + 40;
+  const takeover = createOrder(openConn(), q, { ...base, attempt: 'i-8', now: t2 });
+  await new Promise((r) => setTimeout(r, 100));
+  p.release.forEach((f) => f()); // the original wakes up with the takeover half done
+  const r1 = await first;
+  assert.equal(r1.creating, true);
+  const [{ qr_id, expires_at }] = await db`SELECT qr_id, expires_at FROM orders WHERE attempt='i-8'`;
+  assert.equal(qr_id, null);
+  assert.equal(expires_at, t2 + 360);
+  q.release.forEach((f) => f());
+  const r2 = await takeover;
+  assert.equal((await db`SELECT qr_id, expires_at FROM orders WHERE attempt='i-8'`)[0].qr_id, r2.qr.id);
+});
+
 test('the takeover uses the stored concept and amount, not those of the retry', async () => {
   const { db } = await newDb();
   const p = pey(); p.hang = true;

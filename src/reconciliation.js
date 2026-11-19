@@ -6,7 +6,8 @@ const { Webhook } = sw;
 
 export const POST_WINDOW = 1800; // 30 min after expiry to discover late payments or second payments
 export const MAX_PER_QUERY = 5; // orders a single read may reconcile; the rest wait for the next one
-export const LEASE = 5; // seconds a reservation lasts before we know whether the attempt succeeded
+export const LEASE = 30; // reservation while the attempt runs: covers pey's worst case so another read does not overlap
+export const RETRY = 5; // if the attempt fails, the reservation is shortened to this; a cut process keeps the full lease
 export const BUDGET_MS = 8000; // wait cap per read; whatever does not finish stays «pending» and is picked up later
 
 // Reconcile leaving a durable trace: «pending» from before calling pey until it finishes successfully.
@@ -69,21 +70,23 @@ export const interval = (o, now) => (o.status === 'pending' && now <= o.expires_
 
 // Reconciles the orders that are due (same window as before), with an atomic reservation shared across instances.
 // Total budget per read: cap on orders and on wait; a failure or cut leaves the order «pending».
-export async function reconcileOnRead(db, pey, orders, { now = nowSec(), log = console.error } = {}) {
+export async function reconcileOnRead(db, pey, orders, { now = nowSec(), log = console.error, budgetMs = BUDGET_MS } = {}) {
   const candidates = orders.filter((o) => inWindow(o, now));
   if (!candidates.length) return;
+  const deadline = Date.now() + budgetMs; // the clock runs from before reserving: reservations count too
   const taken = [];
   for (const o of candidates) {
-    if (taken.length >= MAX_PER_QUERY) break;
-    if (await reserve(db, `recon:${o.id}`, LEASE, now)) taken.push(o); // short reservation: if something fails or is cut, retry soon
+    if (taken.length >= MAX_PER_QUERY || Date.now() >= deadline) break;
+    if (await reserve(db, `recon:${o.id}`, LEASE, now)) taken.push(o);
   }
+  // Only if the reservation is still ours (same expiry) is it shortened or extended: it does not overwrite another instance's.
+  const adjust = (o, sec) => db`UPDATE limits SET expires_at=${now + sec} WHERE key=${`recon:${o.id}`} AND expires_at=${now + LEASE}`;
   const work = Promise.allSettled(taken.map(async (o) => {
     const r = await reconcileMarking(db, pey, o.id, now);
-    if (!r.ok) return log(`reconcile order ${o.id}: ${r.error}`);
-    const wait = interval(o, now); // success: the reservation is extended to the order's normal interval
-    if (wait > LEASE) await db`UPDATE limits SET expires_at=${now + wait} WHERE key=${`recon:${o.id}`}`;
+    if (!r.ok) { log(`reconcile order ${o.id}: ${r.error}`); return adjust(o, RETRY); }
+    return adjust(o, interval(o, now)); // success: the reservation moves to the order's normal interval
   }));
   let t;
-  await Promise.race([work, new Promise((r) => { t = setTimeout(r, BUDGET_MS); })]);
+  await Promise.race([work, new Promise((r) => { t = setTimeout(r, Math.max(0, deadline - Date.now())); })]);
   clearTimeout(t);
 }

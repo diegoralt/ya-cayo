@@ -113,7 +113,30 @@ test('cut mid-reconciliation: the pending and the reservation survive and anothe
   assert.ok(Date.now() - t0 < 5000);
   assert.equal((await db`SELECT 1 FROM pending_reconciliation WHERE order_id=${id}`).length, 1);
   const p = pey([pago('T1')]);
-  await reconcileOnRead(openConn(), p, orders, { now: T0 + 7, ...silent }); // another instance, reservation expired
-  assert.equal((await orderView(db, id, T0 + 7)).status, 'paid');
+  await reconcileOnRead(openConn(), p, orders, { now: T0 + 7, ...silent });
+  assert.equal(p.consultas, 0); // the reservation of the cut attempt still holds (LEASE)
+  await reconcileOnRead(openConn(), p, orders, { now: T0 + 32, ...silent }); // another instance, reservation expired
+  assert.equal((await orderView(db, id, T0 + 32)).status, 'paid');
   assert.equal((await db`SELECT 1 FROM pending_reconciliation WHERE order_id=${id}`).length, 0);
+});
+
+test('a slow pey query keeps the reservation: another read 6 s later does not overlap', async () => {
+  const { db } = await newDb();
+  const slow = pey([], { demora: 300 });
+  await createOrder(db, slow, { concept: 't', amountCents: 1, now: T0 });
+  const orders = await filas(db);
+  const first = reconcileOnRead(db, slow, orders, { now: T0 + 1, ...silent });
+  await new Promise((r) => setTimeout(r, 100)); // the first is still waiting on pey
+  await reconcileOnRead(db, slow, orders, { now: T0 + 7, ...silent }); // more than 5 s later, but the attempt has not finished
+  assert.equal(slow.consultas, 1);
+  await first;
+});
+
+test('the budget counts from before reserving: with no time left no reservation is taken and pey is not queried', async () => {
+  const { db } = await newDb();
+  const p = pey([]);
+  await createOrder(db, p, { concept: 't', amountCents: 1, now: T0 });
+  await reconcileOnRead(db, p, await filas(db), { now: T0 + 1, budgetMs: 0, ...silent });
+  assert.equal(p.consultas, 0);
+  assert.equal((await db`SELECT 1 FROM limits WHERE key LIKE 'recon:%'`).length, 0);
 });

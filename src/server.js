@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
-import { openDb, createOrder, deliver, orderView, countFailure, pinFailures, nowSec, recordOtherMethod, metrics } from './core.js';
-import { handleWebhook, reconcileOnRead, reconcileMarking } from './reconciliation.js';
+import { openDb, createOrder, deliver, orderView, countFailure, refundAttempt, nowSec, recordOtherMethod, metrics } from './core.js';
+import { handleWebhook, reconcileOnRead, reconcileMarking, POST_WINDOW } from './reconciliation.js';
 import { createPeyClient } from './pey.js';
 
 const MAX_BODY = 64 * 1024;
@@ -24,7 +24,9 @@ const SECURITY = {
 const json = (res, code, obj) => res.writeHead(code, { 'content-type': 'application/json' }).end(JSON.stringify(obj));
 const equal = (a = '', b = '') => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
+// If the runtime (e.g. Vercel helpers) already consumed the body, reading it would silently give '': fail loudly (500) instead of accepting an empty body.
 async function readBody(req) {
+  if (req.body !== undefined || req.readableEnded) throw Object.assign(new Error('body already consumed by the runtime (Vercel helpers on? NODEJS_HELPERS=0)'), { code: 500 });
   const chunks = [];
   let size = 0;
   for await (const c of req) {
@@ -71,13 +73,16 @@ export function createHandler({ db, pey, secret, pin, holder = '[titular por dec
       // Cashier: everything else requires the demo PIN.
       // The IP is only taken from the header Vercel overwrites; outside Vercel any header is forgeable: the socket is used.
       const ip = (onVercel && req.headers['x-vercel-forwarded-for']?.split(',')[0].trim()) || req.socket.remoteAddress, now = nowSec();
-      const f = await pinFailures(db, ip, now);
-      if (f.n >= MAX_FAILURES) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.until - now) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
-      if (!equal(req.headers['x-pin'], pin)) { await countFailure(db, ip, WINDOW_S, now); return json(res, 401, { error: 'PIN incorrecto' }); }
+      const f = await countFailure(db, ip, WINDOW_S, now); // reserves the attempt before checking the PIN
+      if (f.n > MAX_FAILURES) { await refundAttempt(db, ip, f.until); return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.until - now) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' })); } // the rejected one verifies nothing (gives no extra guesses) and releases its reservation, so concurrent successes cannot pin the counter
+      if (!equal(req.headers['x-pin'], pin)) return json(res, 401, { error: 'PIN incorrecto' });
+      await refundAttempt(db, ip, f.until); // good PIN: it does not count as a failure
       if (req.method === 'GET' && path === '/api/metrics') return json(res, 200, { ...(await metrics(db, fee)), fee });
       if (req.method === 'GET' && path === '/api/orders') {
-        const ids = await db`SELECT id, qr_id, status, expires_at FROM orders WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
-        await reconcileOnRead(db, pey, [...ids]);
+        // Candidates to reconcile: every order inside the window, not only the 20 shown.
+        const candidates = await db`SELECT id, qr_id, status, expires_at FROM orders WHERE qr_id IS NOT NULL AND expires_at + ${POST_WINDOW} >= ${nowSec()} ORDER BY id DESC`;
+        await reconcileOnRead(db, pey, [...candidates]);
+        const ids = await db`SELECT id FROM orders WHERE qr_id IS NOT NULL ORDER BY id DESC LIMIT 20`;
         // Sequential on purpose: up to 20 orders x 3 queries fired at once hang the transaction pooler (found in production, H9).
         const views = [];
         for (const { id } of ids) views.push(cashierView(await orderView(db, id)));
@@ -108,6 +113,7 @@ export function createHandler({ db, pey, secret, pin, holder = '[titular por dec
       return res.writeHead(404).end();
     } catch (e) {
       if (e.code === 413) return res.writeHead(413).end();
+      if (e.code === 500) { console.error('error:', e.message); return json(res, 500, { error: 'error de configuración del servidor' }); }
       console.error('error:', e?.message); // never the body or credentials
       return json(res, e instanceof SyntaxError ? 400 : 502, { error: e instanceof SyntaxError ? 'JSON inválido' : 'error al hablar con pey' });
     }
