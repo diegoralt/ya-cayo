@@ -45,10 +45,11 @@ export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, 
     throw e;
   }
   const [g] = await db`UPDATE ordenes SET qr_id=${String(qr.id)}, qr_string=${qr.qrString ?? null}, qr_image=${qr.qrImage ?? null}, creando_desde=NULL
-    WHERE id=${id} AND qr_id IS NULL RETURNING id`;
+    WHERE id=${id} AND qr_id IS NULL AND creando_desde=${now} RETURNING id`; // creando_desde=now: si otro relevó, este QR ya no es el vigente (su expira_en no coincidiría)
   if (g) return { id, qr };
   const [o] = await db`SELECT qr_id, qr_string, qr_image FROM ordenes WHERE id=${id}`; // otro guardó antes: se descarta el nuestro
-  if (!o?.qr_id) throw new Error('la orden desapareció durante la creación');
+  if (!o) throw new Error('la orden desapareció durante la creación');
+  if (!o.qr_id) return { id, creando: true }; // relevada y aún sin guardar: el relevo la termina
   return { id, qr: qrDe(o), reutilizada: true };
 }
 

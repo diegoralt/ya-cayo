@@ -83,6 +83,26 @@ test('función muerta tras aceptar pey: pasado el plazo se recrea el QR de la mi
   assert.equal(await ordenes(db), 1);
 });
 
+test('creador atascado que despierta tras el relevo pero antes de que este guarde: no gana, y expira_en sigue al QR vigente', async () => {
+  const { db, abrir } = await nuevaDb();
+  const p = pey(); p.colgar = true;
+  const primero = crearOrden(db, p, { ...base, intento: 'i-8' });
+  await new Promise((r) => setTimeout(r, 100));
+  const q = pey(); q.colgar = true;
+  const t2 = T0 + 40;
+  const relevo = crearOrden(abrir(), q, { ...base, intento: 'i-8', now: t2 });
+  await new Promise((r) => setTimeout(r, 100));
+  p.soltar.forEach((f) => f()); // despierta el original con el relevo a medias
+  const r1 = await primero;
+  assert.equal(r1.creando, true);
+  const [{ qr_id, expira_en }] = await db`SELECT qr_id, expira_en FROM ordenes WHERE intento='i-8'`;
+  assert.equal(qr_id, null);
+  assert.equal(expira_en, t2 + 360);
+  q.soltar.forEach((f) => f());
+  const r2 = await relevo;
+  assert.equal((await db`SELECT qr_id, expira_en FROM ordenes WHERE intento='i-8'`)[0].qr_id, r2.qr.id);
+});
+
 test('el relevo usa el concepto y monto guardados, no los del reintento', async () => {
   const { db } = await nuevaDb();
   const p = pey(); p.colgar = true;
