@@ -126,6 +126,20 @@ test('webhook ahead of the save (order creating): adopts the QR by metadata.atte
   assert.equal((await orderView(db, id)).qr_id, 'QR-X');
 });
 
+test('real pey event shape (attempt in metadata.externalMetadata): adopts the QR and reconciles', async () => {
+  const { db } = await newDb();
+  const p = pey({ txs: [paidTx()] }); p.hang = true;
+  createOrder(db, p, { ...base, now: nowSec(), attempt: 'i-7b' });
+  await new Promise((r) => setTimeout(r, 100));
+  const [{ id }] = await db`SELECT id FROM orders WHERE attempt='i-7b'`;
+  const body = JSON.stringify({ type: 'codi.qr.payment_received', codiQrId: 'QR-R', transactionId: 'TX1', amount: 0.01, datePaid: nowSec() + 1, numRef: '1', metadata: { accountType: 40, externalMetadata: { attempt: 'i-7b' } } });
+  assert.equal(await handleWebhook({ db, pey: p, secret: SECRET }, body, sign(body, 'msg_real')), 200);
+  const v = await orderView(db, id);
+  assert.equal(v.qr_id, 'QR-R');
+  assert.equal(v.status, 'paid');
+  p.release.forEach((f) => f());
+});
+
 test('payment to a QR that is no longer the current QR of the order: recorded as invalid, no delivery or status change', async () => {
   const { db } = await newDb();
   const p = pey({ txs: [] });

@@ -40,7 +40,7 @@ export async function handleWebhook({ db, pey, secret }, rawBody, headers) {
   if (!o) {
     // No order with that QR: correlation is ours, via metadata.attempt (pey returns it in the event).
     let md = d.metadata; if (typeof md === 'string') { try { md = JSON.parse(md); } catch { md = null; } }
-    const attempt = md?.attempt;
+    const attempt = md?.attempt ?? md?.externalMetadata?.attempt; // real pey events (18-nov payment) nest it in externalMetadata
     if (!attempt) return 200; // no order (yet): stays received-unprocessed; reconcile-on-read covers it
     const [p] = await db`SELECT id, qr_id FROM orders WHERE attempt=${String(attempt)}`;
     if (!p) return 200;
