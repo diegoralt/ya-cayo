@@ -25,26 +25,31 @@ const qrDe = (o) => ({ id: o.qr_id, qrString: o.qr_string, qrImage: o.qr_image }
 // Devuelve { id, qr } (nuevo o ya existente: reutilizada) o { id, creando: true } si otro lo está creando.
 export async function crearOrden(db, pey, { concepto, montoCentavos, ttl = 360, now = ahora(), intento = randomUUID(), maxVivos }) {
   let id, c = concepto, m = montoCentavos;
-  // Cupo atómico: la fila 'cupo' de limites serializa cuenta + alta; un intento ya existente no consume cupo (el atascado ya cuenta como vivo: cobrosVivos incluye los «creando»).
-  const nueva = await db.begin(async (t) => {
+  // Con cupo, cuenta + alta + relevo van bajo la fila 'cupo' de limites (todo lo que deja un cobro vivo se serializa).
+  // Un intento exento ya ocupa cupo (vivo, contado en cobrosVivos) o ya tiene QR; uno vencido y atascado lo reclama como nuevo.
+  const paso = async (q) => {
     if (maxVivos) {
-      await t`INSERT INTO limites(clave, valor, vence_en) VALUES ('cupo', 0, 0) ON CONFLICT (clave) DO UPDATE SET valor=limites.valor`;
-      if (!(await t`SELECT 1 FROM ordenes WHERE intento=${intento}`).length && (await cobrosVivos(t, now)) >= maxVivos) return 'lleno';
+      await q`INSERT INTO limites(clave, valor, vence_en) VALUES ('cupo', 0, 0) ON CONFLICT (clave) DO UPDATE SET valor=limites.valor`;
+      const exento = (await q`SELECT 1 FROM ordenes WHERE intento=${intento} AND (qr_id IS NOT NULL OR (estado='pendiente' AND expira_en>=${now}))`).length;
+      if (!exento && (await cobrosVivos(q, now)) >= maxVivos) return { lleno: true };
     }
-    return (await t`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde)
-      VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${intento}, ${now}) ON CONFLICT (intento) DO NOTHING RETURNING id`)[0];
-  });
-  if (nueva === 'lleno') return { lleno: true };
-  if (nueva) id = nueva.id;
-  else {
-    const [o] = await db`SELECT id, concepto, monto_centavos, qr_id, qr_string, qr_image FROM ordenes WHERE intento=${intento}`;
-    if (!o) return crearOrden(db, pey, { concepto, montoCentavos, ttl, now, intento }); // la borró un error de pey entre medias
-    if (o.qr_id) return { id: o.id, qr: qrDe(o), reutilizada: true };
-    const [r] = await db`UPDATE ordenes SET creando_desde=${now}, expira_en=${now + ttl}
+    const [n] = await q`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde)
+      VALUES (${c}, ${m}, ${now}, ${now + ttl}, ${randomUUID()}, ${intento}, ${now}) ON CONFLICT (intento) DO NOTHING RETURNING id`;
+    if (n) return { id: n.id };
+    const [o] = await q`SELECT id, concepto, monto_centavos, qr_id, qr_string, qr_image FROM ordenes WHERE intento=${intento}`;
+    if (!o) return { reintentar: true }; // la borró un error de pey entre medias
+    if (o.qr_id) return { existente: o };
+    const [r] = await q`UPDATE ordenes SET creando_desde=${now}, expira_en=${now + ttl}
       WHERE id=${o.id} AND qr_id IS NULL AND creando_desde <= ${now - PLAZO_CREANDO} RETURNING id`;
-    if (!r) return { id: o.id, creando: true }; // otro la está creando (o ya la tomó el relevo)
-    id = o.id; c = o.concepto; m = o.monto_centavos; // el relevo usa lo guardado, no lo que mande el reintento
-  }
+    return r ? { id: o.id, relevo: o } : { id: o.id, creando: true }; // creando: otro la está creando (o ya la tomó el relevo)
+  };
+  const x = await (maxVivos ? db.begin(paso) : paso(db));
+  if (x.lleno) return { lleno: true };
+  if (x.reintentar) return crearOrden(db, pey, { concepto, montoCentavos, ttl, now, intento, maxVivos });
+  if (x.existente) return { id: x.existente.id, qr: qrDe(x.existente), reutilizada: true };
+  if (x.creando) return { id: x.id, creando: true };
+  id = x.id;
+  if (x.relevo) { c = x.relevo.concepto; m = x.relevo.monto_centavos; } // el relevo usa lo guardado, no lo que mande el reintento
   let qr;
   try {
     qr = await pey.createQr({ amountCents: m, concept: c, expiration: ttl, numRef: String(id % 10_000_000), metadata: { intento } });
@@ -140,7 +145,7 @@ export async function marcarProcesado(db, webhookId, now = ahora()) {
   await db`UPDATE eventos SET procesado_en=${now} WHERE webhook_id=${webhookId} AND procesado_en IS NULL`;
 }
 
-// PIN por IP: n fallos por ventana en limites. Un solo upsert atómico; devuelve cuántos van y cuándo vence la ventana.
+// PIN por IP: n intentos por ventana en limites. Un solo upsert atómico; devuelve cuántos van (este incluido) y cuándo vence la ventana.
 export async function contarFallo(db, ip, ventana, now = ahora()) {
   const [r] = await db`INSERT INTO limites(clave, valor, vence_en) VALUES (${`pin:${ip}`}, 1, ${now + ventana})
     ON CONFLICT (clave) DO UPDATE SET valor = CASE WHEN limites.vence_en <= ${now} THEN 1 ELSE limites.valor + 1 END,
@@ -148,9 +153,9 @@ export async function contarFallo(db, ip, ventana, now = ahora()) {
     RETURNING valor, vence_en`;
   return { n: Number(r.valor), hasta: Number(r.vence_en) };
 }
-export async function fallosPin(db, ip, now = ahora()) {
-  const [r] = await db`SELECT valor, vence_en FROM limites WHERE clave=${`pin:${ip}`} AND vence_en>${now}`;
-  return r ? { n: Number(r.valor), hasta: Number(r.vence_en) } : { n: 0, hasta: 0 };
+// Se reserva el intento ANTES de verificar el PIN (así las ráfagas no pasan todas bajo el tope); si el PIN era bueno, se devuelve.
+export async function devolverIntento(db, ip, now = ahora()) {
+  await db`UPDATE limites SET valor = GREATEST(valor - 1, 0) WHERE clave=${`pin:${ip}`} AND vence_en>${now}`;
 }
 
 // Reserva atómica con vencimiento: true solo para quien la toma (la fila bloquea a los demás hasta `vence_en`).

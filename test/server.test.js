@@ -173,6 +173,31 @@ test('intento atascado (sin qr_id): cuenta como cobro vivo y su reintento se com
   assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
   s.cerrar();
 });
+test('intento atascado ya vencido: no cuenta, y su reintento con el cupo lleno recibe 409 sin revivirlo', async () => {
+  const s = await arrancar();
+  const t = ahora();
+  await s.db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 900}, ${t - 500}, 'tok-venc', 'vencido-1', ${t - 900})`;
+  for (const i of ['w-intento-1', 'w-intento-2', 'w-intento-3']) assert.equal((await s.crear(1, { intento: i })).status, 201);
+  assert.equal((await s.crear(1, { intento: 'vencido-1' })).status, 409);
+  assert.equal((await s.db`SELECT count(*) n FROM ordenes WHERE qr_id IS NOT NULL`)[0].n, 3);
+  assert.ok((await s.db`SELECT expira_en FROM ordenes WHERE intento='vencido-1'`)[0].expira_en < t);
+  s.cerrar();
+});
+
+test('PIN: ráfaga de 20 intentos malos simultáneos: 10 reciben 401 y 10 reciben 429', async () => {
+  const s = await arrancar();
+  const r = await Promise.all(Array.from({ length: 20 }, () => s.f('/api/metricas', { pin: 'mal' })));
+  assert.equal(r.filter((x) => x.status === 401).length, 10);
+  assert.equal(r.filter((x) => x.status === 429).length, 10);
+  s.cerrar();
+});
+
+test('PIN bueno no consume intentos: más de 10 aciertos seguidos no bloquean', async () => {
+  const s = await arrancar();
+  for (let i = 0; i < 15; i++) assert.equal((await s.f('/api/metricas')).status, 200);
+  s.cerrar();
+});
+
 async function db_atascado(db) {
   const t = ahora();
   await db`INSERT INTO ordenes(concepto, monto_centavos, creada_en, expira_en, token, intento, creando_desde) VALUES ('t', 100, ${t - 100}, ${t + 260}, 'tok-atascado', 'atascado-1', ${t - 100})`;

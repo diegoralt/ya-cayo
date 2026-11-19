@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
-import { abrirDb, crearOrden, entregar, vista, contarFallo, fallosPin, ahora, registrarOtroMetodo, metricas } from './core.js';
+import { abrirDb, crearOrden, entregar, vista, contarFallo, devolverIntento, ahora, registrarOtroMetodo, metricas } from './core.js';
 import { manejarWebhook, conciliarAlConsultar, conciliarMarcando, VENTANA_POST } from './conciliacion.js';
 import { crearClientePey } from './pey.js';
 
@@ -71,9 +71,10 @@ export function crearServidor({ db, pey, secret, pin, titular = '[titular por de
       // Caja: todo lo demás exige el PIN de demo.
       // La IP solo se toma de la cabecera que Vercel sobrescribe; fuera de Vercel cualquier cabecera es falsificable: se usa el socket.
       const ip = (enVercel && req.headers['x-vercel-forwarded-for']?.split(',')[0].trim()) || req.socket.remoteAddress, ahora_ = ahora();
-      const f = await fallosPin(db, ip, ahora_);
-      if (f.n >= MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.hasta - ahora_) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
-      if (!iguales(req.headers['x-pin'], pin)) { await contarFallo(db, ip, VENTANA_S, ahora_); return json(res, 401, { error: 'PIN incorrecto' }); }
+      const f = await contarFallo(db, ip, VENTANA_S, ahora_); // reserva el intento antes de verificar el PIN
+      if (f.n > MAX_FALLOS) return res.writeHead(429, { 'content-type': 'application/json', 'retry-after': Math.max(1, f.hasta - ahora_) }).end(JSON.stringify({ error: 'demasiados intentos; espera un minuto' }));
+      if (!iguales(req.headers['x-pin'], pin)) return json(res, 401, { error: 'PIN incorrecto' });
+      await devolverIntento(db, ip, ahora_); // PIN bueno: no cuenta como fallo
       if (req.method === 'GET' && ruta === '/api/metricas') return json(res, 200, { ...(await metricas(db, comision)), comision });
       if (req.method === 'GET' && ruta === '/api/ordenes') {
         // Candidatas a conciliar: toda orden dentro de la ventana, no solo las 20 que se muestran.
