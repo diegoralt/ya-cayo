@@ -38,8 +38,9 @@ export function readSqlite(path) {
       transactions: all('transacciones').map((r) => ({ transaction_id: r.transaction_id, order_id: r.orden_id, amount_cents: r.monto_centavos,
         date_paid: n(r.date_paid), classification: tr('classification', r.clasificacion) })),
       records: all('registros').map((r) => ({ id: r.id, concept: r.concepto, amount_cents: r.monto_centavos, method: tr('method', r.metodo), created_at: r.creada_en })),
-      // The old system recorded an event when it handled it: it is imported as processed (a resend answers 200 without reprocessing).
-      events: all('eventos').map((r) => ({ webhook_id: r.webhook_id, received_at: r.recibido_en, processed_at: r.recibido_en })),
+      // The old system logged an event BEFORE querying pey and could answer 503 after: received != processed. Without evidence of
+      // processing the import leaves processed_at NULL, so a resend is reconciled again (idempotent: no duplicate facts or deliveries).
+      events: all('eventos').map((r) => ({ webhook_id: r.webhook_id, received_at: r.recibido_en, processed_at: null })),
       deliveries: all('entregas').map((r) => ({ order_id: r.orden_id, delivered_at: r.entregada_en })),
     };
     const agg = {};

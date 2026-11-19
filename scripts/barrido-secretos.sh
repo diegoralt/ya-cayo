@@ -15,8 +15,8 @@ hallazgo() { echo "HALLAZGO: $1"; HALLAZGOS=$((HALLAZGOS + 1)); }
 error() { echo "ERROR: $1"; ERRORES=$((ERRORES + 1)); }
 
 PATRON='whsec_[A-Za-z0-9+/=]{8,}|Bearer [A-Za-z0-9._~+/=-]{16,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|TunnelSecret|-----BEGIN [A-Z ]*PRIVATE KEY-----|(api[_-]?key|secret|token|passw(or)?d)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9+/_=-]{12,}["'"'"']|^\+?[A-Z_]*(KEY|SECRET|TOKEN|PIN)[A-Z_]*=[^[:space:]]{6,}'
-# Claves de .env cuyo VALOR es sensible (PORT, DB_PATH, HOLDER_NAME, CARD_FEE_RATE no lo son).
-CLAVES_SECRETAS='KEY|SECRET|TOKEN|PIN|PASS|CREDENTIAL'
+# Claves de .env cuyo VALOR es sensible (las DATABASE_URL* llevan la contraseña de Postgres; PORT, DB_PATH, HOLDER_NAME, CARD_FEE_RATE no lo son).
+CLAVES_SECRETAS='KEY|SECRET|TOKEN|PIN|PASS|CREDENTIAL|DATABASE_URL'
 
 # 1) Lista de archivos: versionados + sin versionar que no estén ignorados.
 git ls-files -co --exclude-standard > "$TMP/archivos" 2>/dev/null || error "git ls-files falló"
@@ -34,6 +34,10 @@ if [ -r .env ]; then
     valor=$(printf '%s' "$valor" | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//')
     printf '%s' "$clave" | grep -qE "$CLAVES_SECRETAS" || continue
     [ ${#valor} -ge 4 ] || continue
+    # Una URL de conexión también se busca por su sola contraseña (user:pass@host).
+    pw=$(printf '%s' "$valor" | sed -n 's|^[A-Za-z]*://[^:/@]*:\([^@]*\)@.*|\1|p')
+    for valor in "$valor" "$pw"; do
+    [ ${#valor} -ge 4 ] || continue
     # DEMO_PIN es público por decisión de Diego (2026-11-15): se permite solo en README.md e instrucciones.md y en el historial.
     # Cualquier otra clave, y el PIN en cualquier otro archivo o en las respuestas de la URL pública, sigue siendo hallazgo.
     while IFS= read -r f; do
@@ -42,6 +46,7 @@ if [ -r .env ]; then
       grep -qF -e "$valor" "$f" 2>/dev/null && hallazgo "valor de $clave aparece en $f"
     done < "$TMP/archivos"
     [ "$clave" = DEMO_PIN ] || { grep -qF -e "$valor" "$TMP/historial" && hallazgo "valor de $clave aparece en el historial de git"; }
+    done
   done < "$TMP/env"
 fi
 

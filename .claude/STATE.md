@@ -4,8 +4,8 @@
 
 ## Siguiente acción
 Cerrar la cadena de PRs apilados (squash; PRs en español con la skill `pr-description`). Falta el **#8** (`feat/english-naming`).
-1. Esperar el OK de Diego para commitear los arreglos de la ronda 1 de la fase 4 (2 P2 de Codex: `public/caja.html` leía nombres viejos; `scripts/migrar-sqlite-a-pg.js` rechazaba el puerto 5432 en `DATABASE_URL_APP`). Ya están hechos y probados, sin commitear. Luego: barrido, `git push --force-with-lease`.
-2. **Fase 4 (compuerta antes de mergear el #8):** ronda 2 con `~/.claude/skills/medium-change/pre-push-review.sh --target main --change docs/changes/2026-11-15-hosting-vercel --effort high` (tope 3 rondas; el informe sale en `.claude/reviews/<sha>.md`, ignorado por git). Al cerrar, copiar los informes a `docs/changes/2026-11-15-hosting-vercel/` con sufijo Codex y anotar en `despliegue.md` que la compuerta de H9 se cumplió después.
+1. Rondas 1 y 2 de la fase 4 (Codex, high): 0 P0/P1 y 5 P2 en total, todos arreglados y subidos. Falta la ronda 3 (última del tope) sobre el commit de los arreglos de la ronda 2.
+2. **Fase 4 (compuerta antes de mergear el #8):** ronda 3 con `~/.claude/skills/medium-change/pre-push-review.sh --target main --change docs/changes/2026-11-15-hosting-vercel --effort high` (tope 3 rondas; el informe sale en `.claude/reviews/<sha>.md`, ignorado por git). Al cerrar, copiar los informes a `docs/changes/2026-11-15-hosting-vercel/` con sufijo Codex y anotar en `despliegue.md` que la compuerta de H9 se cumplió después.
 3. Atender a Codex en el #8 (arreglo + prueba + respuesta + resolver hilo) y mergear con `has_unresolved_findings:false`.
 4. Tras el merge: `branch-close`, y **redesplegar Production solo con aprobación de Diego**.
 
@@ -20,4 +20,4 @@ Cerrar la cadena de PRs apilados (squash; PRs en español con la skill `pr-descr
 - Rotar el PIN después del 14-dic.
 
 ## En curso en esta rama (`feat/english-naming`)
-Port de los arreglos de H4-H6 ya subido; la ronda 1 de la fase 4 (0 P0/P1, 2 P2) tiene arreglo local sin commitear. `node --test` 88/88.
+Arreglos de las rondas 1 y 2 subidos; `node --test` 89/89. Pendiente: ronda 3, atender a Codex en el #8 y merge.

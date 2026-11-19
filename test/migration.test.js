@@ -55,7 +55,7 @@ test('import: same content in PG (renamed fields, translated values, ids kept) a
   assert.equal(o.status, 'delivered'); assert.equal(o.attempt, null); assert.equal(o.creating_since, null);
   assert.equal((await db`SELECT classification FROM transactions WHERE transaction_id='T2late'`)[0].classification, 'late');
   assert.equal((await db`SELECT method FROM records ORDER BY id`).map((x) => x.method).join(), 'other,tarjeta');
-  assert.equal((await db`SELECT processed_at FROM events WHERE webhook_id='wh-1'`)[0].processed_at, 1000); // imported as processed
+  assert.equal((await db`SELECT processed_at FROM events WHERE webhook_id='wh-1'`)[0].processed_at, null); // received != processed: a resend reconciles again
 });
 
 test('repeated import: nothing inserted, nothing duplicated, still identical', async () => {

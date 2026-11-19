@@ -165,11 +165,11 @@ function label(o) {
   return 'Esperando';
 }
 const ESTADO = {
-  Esperando: ['e-info', '⏳ Esperando confirmación del servidor', 'Una captura de keepAwake no cuenta como pago.'],
+  Esperando: ['e-info', '⏳ Esperando confirmación del servidor', 'Una captura de pantalla no cuenta como pago.'],
   Pagado: ['e-ok', '✔ Ya cayó el pago · confirmado por el servidor', 'Puedes entregar.'],
   Entregado: ['e-ok', '📦 Entregado · 1 entrega registrada', 'Reprocesar el evento no genera otra entrega.'],
   'Entregado + duplicado': ['e-warn', '⚠ Posible duplicado · una sola entrega', 'Hubo un segundo pago del mismo ticket. Devolución: registro manual.'],
-  Vencido: ['e-bad', '⌛ QR vencido', 'Crea un cobro nuevo. Se sigue consultando 30 min por si alguien pagó justo before.'],
+  Vencido: ['e-bad', '⌛ QR vencido', 'Crea un cobro nuevo. Se sigue consultando 30 min por si alguien pagó justo antes.'],
   'Pago tardío': ['e-warn', '⚠ Pago tardío · sin entrega automática', 'Llegó tras el vencimiento. Decide a mano; devolución = registro manual.'],
 };
 function speak(txt) { if (voiceOn && 'speechSynthesis' in window) { try { speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(txt), { lang: 'es-MX' })); } catch {} } }
@@ -199,7 +199,7 @@ function paintDetail() {
   $('detalle').hidden = !o; if (!o) return;
   const n = label(o), [cls, t, s] = ESTADO[n], texto = failed ? 'No pude consultar al servidor · reintentando' : s, key = cls + t + texto;
   $('resumen').textContent = pesos(o.amount_cents); $('resumen2').textContent = `#${o.id} · ${o.concept}`;
-  if ($('estado').dataset.k !== key) { // solo si cambia: evita que el lector de keepAwake repita el aviso cada segundo
+  if ($('estado').dataset.k !== key) { // solo si cambia: evita que el lector de pantalla repita el aviso cada segundo
     $('estado').dataset.k = key; $('estado').className = 'estado ' + cls; $('estado').innerHTML = '';
     const b = document.createElement('div'); b.textContent = t; const sm = document.createElement('small'); sm.textContent = texto; $('estado').append(b, sm);
   }
