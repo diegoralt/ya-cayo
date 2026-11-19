@@ -114,9 +114,9 @@ Decisiones del usuario: varios comercios, el comercio primero, adopción como fi
 
 ## Evidencia verificada con pagos reales de $0.01 (15-nov-2026)
 - `qrImage` = PNG en base64; `qr_string` = JSON `{"TYP":20,…`. pey quita `$` y `.` del concepto.
-- Webhook `codi.qr.payment_received`: cuerpo PLANO (sin `data`): `type`, `codiQrId`, `transactionId`, `amount`, `datePaid`, `numRef`, `concept`, `apiKeyId`, `bankAccountId`, `metadata`. Firma Standard Webhooks válida con `PEY_WEBHOOK_SECRET`; el `webhook-id` (`msg_…`) coincide con el «Request ID» de los logs de pey y se guarda en `eventos`.
+- Webhook `codi.qr.payment_received`: cuerpo PLANO (sin `data`): `type`, `codiQrId`, `transactionId`, `amount`, `datePaid`, `numRef`, `concept`, `apiKeyId`, `bankAccountId`, `metadata`. Firma Standard Webhooks válida con `PEY_WEBHOOK_SECRET`; el `webhook-id` (`msg_…`) coincide con el «Request ID» de los logs de pey y se guarda en `events`. La correlación con nuestro cobro llega en `metadata.externalMetadata.attempt` (no en `metadata.attempt`) y `amount` va en pesos (confirmado con el pago del 18-nov).
 - Docs de pey no publican IPs de origen, User-Agent, reintentos ni timeout. Observado: origen en AWS, `python-requests/2.32.3`.
-- **Cloudflare:** Bot Fight Mode (plan gratuito) desafía el POST de pey con 403 «Just a moment...»; no se puede saltar con reglas WAF/Page Rules (solo IP Access Rules, frágiles). Con el interruptor apagado llegó el 200. Estable: host fuera de ese bloqueo o Super Bot Fight Mode con Skip.
+- **Cloudflare:** Bot Fight Mode (plan gratuito) desafía el POST de pey con 403 «Just a moment...»; no se puede saltar con reglas WAF/Page Rules (solo IP Access Rules, frágiles). Con el interruptor apagado llegó el 200. Estable: host fuera de ese bloqueo o Super Bot Fight Mode con Skip. **Resuelto (18-nov-2026):** `pey.drkingsia.com` es un CNAME a Vercel en «DNS only» (sin proxy de Cloudflare) y el webhook real llegó con 200.
 - No publicar CLABE ni `trackingKey` (salen en el payload).
 
 ## Hosting: Vercel Hobby (declarado el 18-nov-2026)

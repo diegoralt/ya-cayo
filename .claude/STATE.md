@@ -3,7 +3,7 @@
 > Punto de retomada corto. El detalle largo sigue en `.claude/ESTADO.md` (nombre viejo; migrarlo a este archivo en la rama `chore/english-names`, pendiente de que Diego lo autorice).
 
 ## Siguiente acción
-H9 hecho (evidencia en `docs/changes/2026-11-15-hosting-vercel/despliegue.md`). Queda H10 (docs: README, `docs/contexto.md`, `.env.example`; `sh scripts/barrido-secretos.sh && node --test`) y abrir el PR de `feat/english-naming` (en español). Opcional: repetir el pago desde otra red. Rotar el PIN después del 14-dic.
+H9 y H10 hechos en la rama (evidencia en `docs/changes/2026-11-15-hosting-vercel/despliegue.md`); falta commitear H10 con aprobación de Diego. Luego llevar todo a `main` con **PRs apilados en orden** (decidido por Diego), merge con squash, `--force-with-lease` tras rebasar cada rama sobre `main` con aprobación: `feat/core-postgres` → `feat/conciliar-al-consultar` → `feat/qr-recuperable` → `feat/limites-atomicos` → `feat/handler-vercel` → `feat/english-naming` (este último lleva H7–H10). PRs en español (skill `pr-description`). **Redesplegar Production solo cuando todos estén en `main`** (incluye el fix de `attempt`). Opcional: repetir el pago desde otra red. Rotar el PIN después del 14-dic.
 
 ## Decisiones abiertas
 - Hobby (no comercial) aceptado y declarado por Diego (18-nov). `statement_timeout` por rol en Supabase: no incluido, a decidir.
@@ -14,4 +14,4 @@ H9 hecho (evidencia en `docs/changes/2026-11-15-hosting-vercel/despliegue.md`). 
 - Pendientes menores de Claude: copiar el informe de Codex de H1 a `docs/changes/.../revision-diff-codex.md`; añadir la regla de idioma al CLAUDE.md del proyecto.
 
 ## En curso en esta rama (`feat/english-naming`)
-Corrección de `metadata.externalMetadata.attempt` y evidencia de H9 commiteadas; subir tras el barrido.
+Edición de H10 (README, `docs/contexto.md`, `.env.example`, `plan.md`) sin commitear; barrido y `node --test` (76/76) en verde.
