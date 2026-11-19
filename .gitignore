@@ -10,3 +10,4 @@ docs/entrega/*.local.md
 .vercel
 .env.local
 supabase/.temp
+.claude/reviews/
