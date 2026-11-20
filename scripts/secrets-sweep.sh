@@ -67,7 +67,7 @@ done
 # 6) Respuestas de la URL pública (éxito y error), si se pasó.
 if [ "${1:-}" != "" ]; then
   URL=${1%/}
-  for route in / /health /pagar/x /api/payment/x /api/orders /api/metrics /webhook /.env /package.json /ya-cayo.sqlite /nada; do
+  for route in / /health /pay/x /pagar/x /api/payment/x /api/orders /api/metrics /webhook /.env /package.json /ya-cayo.sqlite /nada; do
     code=$(curl -sS -m 15 -o "$TMP/resp" -w '%{http_code}' "$URL$route" 2>/dev/null) || { error "no pude consultar $URL$route"; continue; }
     grep -IqE "$PATTERN" "$TMP/resp" 2>/dev/null && finding "patrón de secreto en la respuesta de $route ($code)"
     while IFS= read -r line; do

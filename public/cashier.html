@@ -103,7 +103,7 @@
     </div>
     <div id="errd" class="err" role="alert"></div>
     <div class="mut" id="info" style="text-align:center;margin-top:10px"></div>
-    <p class="mut">Enlace del pagador: <a id="enlace" href="#" style="overflow-wrap:anywhere">/pagar/…</a></p>
+    <p class="mut">Enlace del pagador: <a id="enlace" href="#" style="overflow-wrap:anywhere">/pay/…</a></p>
   </section>
 
   <section id="app" class="card" hidden>
@@ -214,7 +214,7 @@ function paintDetail() {
   $('info').textContent = `Transacciones: ${o.transactions} · entregas: ${o.deliveries}`;
   $('entregar').disabled = o.status !== 'paid' || failed; // sin conexión no se entrega: el dato puede estar viejo
   $('entregar').textContent = o.status === 'delivered' ? 'Ya entregado ✔' : o.status === 'paid' ? 'Entregar' : n === 'Pago tardío' ? 'Pago fuera de plazo · revisar a mano' : 'Entregar · sin pago confirmado';
-  $('enlace').href = '/pagar/' + o.token; $('enlace').textContent = location.origin + '/pagar/' + o.token;
+  $('enlace').href = '/pay/' + o.token; $('enlace').textContent = location.origin + '/pay/' + o.token;
 }
 let failed = false;
 let busy = false; // una consulta a la vez: evita que una respuesta lenta pise a otra más nueva

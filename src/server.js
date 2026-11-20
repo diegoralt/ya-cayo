@@ -125,8 +125,8 @@ export function createAppServer(opts) {
   const html = (res, n) => { applyHeaders(res); res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page(n)); };
   const srv = createServer((req, res) => {
     const path = req.url.split('?')[0];
-    if (req.method === 'GET' && path === '/') return html(res, 'caja.html');
-    if (req.method === 'GET' && /^\/pagar\/[\w-]+$/.test(path)) return html(res, 'pagar.html'); // public payer URL stays in Spanish (already shared)
+    if (req.method === 'GET' && path === '/') return html(res, 'cashier.html');
+    if (req.method === 'GET' && /^\/(pay|pagar)\/[\w-]+$/.test(path)) return html(res, 'pay.html'); // ponytail: /pagar/ is the legacy alias of already-issued links; keep it indefinitely (one line)
     return handler(req, res);
   });
   srv.headersTimeout = 10_000; srv.requestTimeout = 15_000; // ponytail: cuts slow connections (slowloris) if something arrives without a proxy
