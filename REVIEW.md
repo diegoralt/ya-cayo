@@ -24,7 +24,6 @@ Criterios de revisión de este repo. Se reporta solo lo que rompe algo o viola u
 
 - Preferencias de estilo, nombres o formato.
 - Refactors "ya que estamos" fuera del alcance del PR.
-- Rutas y archivos públicos en español de la excepción vigente (`/pagar/:token`, `pagar.html`, `maqueta.html`).
 
 ## Formato
 

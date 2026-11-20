@@ -104,14 +104,16 @@ test('cashier and payer pages are served; files outside the two routes are not',
   const s = await start();
   const b = `http://127.0.0.1:${s.srv.address().port}`;
   assert.equal((await fetch(b + '/')).status, 200);
-  assert.equal((await fetch(b + '/pagar/abc')).status, 200);
+  assert.equal((await fetch(b + '/pay/abc')).status, 200);
+  assert.equal((await fetch(b + '/pagar/abc')).status, 404); // the Spanish route is gone
+  for (const r of ['/mockup.html', '/public/mockup.html', '/maqueta.html', '/cashier.html', '/pay.html']) assert.equal((await fetch(b + r)).status, 404, r);
   for (const r of ['/.env', '/package.json', '/ya-cayo.sqlite', '/../.env']) assert.equal((await fetch(b + r)).status, 404);
   s.close();
 });
 
 test('security headers on cashier, payer and API', async () => {
   const s = await start();
-  for (const route of ['/', '/api/orders', '/health', '/nada']) {
+  for (const route of ['/', '/pay/abc', '/api/orders', '/health', '/nada']) {
     const r = await fetch(`http://127.0.0.1:${s.srv.address().port}${route}`);
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff', route);
     assert.equal(r.headers.get('x-frame-options'), 'DENY', route);
@@ -195,8 +197,9 @@ test('createHandler works without its own server (as on Vercel) and does not ser
   srv.close();
   const v = JSON.parse(readFileSync('vercel.json', 'utf8'));
   const destino = Object.fromEntries(v.rewrites.map((r) => [r.source, r.destination]));
-  assert.deepEqual(destino, { '/': '/caja.html', '/pagar/:token': '/pagar.html', '/api/:path*': '/api/index', '/webhook': '/api/index', '/health': '/api/index' });
+  assert.deepEqual(destino, { '/': '/cashier.html', '/pay/:token': '/pay.html', '/api/:path*': '/api/index', '/webhook': '/api/index', '/health': '/api/index' });
   assert.ok(v.headers[0].headers.some((h) => h.key === 'content-security-policy'));
+  assert.equal(readFileSync('.vercelignore', 'utf8').trim(), 'public/mockup.html'); // the mockup is never published
 });
 
 test('the list also reconciles orders older than the 20 shown, while they are still in the window', async () => {
@@ -289,9 +292,16 @@ test('body already consumed by the runtime (Vercel helpers): explicit 500, never
   srv.close();
 });
 
-test('caja.html: the propose button reads the English result fields (regression: qty/notUnderstood)', () => {
-  const html = readFileSync(new URL('../public/caja.html', import.meta.url), 'utf8');
+test('cashier.html: the propose button reads the English result fields (regression: qty/notUnderstood)', () => {
+  const html = readFileSync(new URL('../public/cashier.html', import.meta.url), 'utf8');
   assert.match(html, /p\.notUnderstood/);
   assert.match(html, /qty = p\.qty;/);
   assert.doesNotMatch(html, /p\.noEntendido|p\.cant\b/);
+});
+
+test('cashier.html issues /pay/ links (not the old /pagar/ ones)', () => {
+  const html = readFileSync(new URL('../public/cashier.html', import.meta.url), 'utf8');
+  assert.match(html, /\.href = '\/pay\/' \+ o\.token/);
+  assert.match(html, /location\.origin \+ '\/pay\/' \+ o\.token/);
+  assert.doesNotMatch(html, /\/pagar\//);
 });

@@ -3,11 +3,9 @@
 > Punto de retomada corto; se sobrescribe, no se acumula. El historial de decisiones vive en `docs/changes/` y en git.
 
 ## Siguiente acción
-1. Integrar este PR (`chore/agents-contract`: marcadores, `docs/agentes.md`, regla de idioma en CLAUDE.md). Con `main` protegida: Codex sin hallazgos y conversaciones resueltas.
-2. En `~/.claude` (repo global): el commit que registra ya-cayo como `produccion` está hecho en local; falta el push, con OK de Diego.
-3. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
-4. Decisión pendiente de Diego: rutas en español (`/pagar/:token`, `public/pagar.html`, `public/maqueta.html`); cambiarlas rompe enlaces de pago ya emitidos. Hasta entonces son excepción en CLAUDE.md.
-5. Redesplegar Production solo cuando Diego lo pida (código desplegado previo a los fixes; migración `20261119000000` ya aplicada). Revisar entonces variables de Vercel.
+1. Integrar el PR `chore/english-routes` (`docs/changes/2026-11-19-english-payer-route/`): rutas y páginas públicas en inglés, sin alias `/pagar/` (decisión de Diego). Mergear con squash solo con `has_unresolved_findings:false` en el último commit, hilos resueltos y orden de Diego; luego `branch-close`.
+2. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
+3. Redesplegar Production solo cuando Diego lo pida (código desplegado previo a los fixes; migración `20261119000000` ya aplicada). Revisar entonces variables de Vercel; el redespliegue es lo que hace efectiva la ruta `/pay/:token`.
 
 ## Pendientes del 2.º corte (sáb 12-dic, 23:59 CDMX) · venían de ESTADO.md
 - CLABE propia: alta iniciada el 17-nov («Procesando», hasta 5 días hábiles); NO VERIFICADO su estado actual. La demo pública necesita la tuya en `ACTIVE`.
