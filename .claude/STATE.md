@@ -4,7 +4,7 @@
 
 ## Siguiente acción
 1. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
-2. Redesplegar Production solo cuando Diego lo pida (código desplegado previo a los fixes; migración `20261119000000` ya aplicada). Revisar entonces variables de Vercel; el redespliegue es lo que hace efectiva la ruta `/pay/:token`.
+2. Recuperar el despliegue controlado a Production: hoy cada merge a `main` despliega solo (Vercel conectado a GitHub). Ajustar en Vercel (desconectar o cambiar la rama de Production) con aprobación de Diego. De paso, a los Preview les falta `DATABASE_URL`.
 
 ## Pendientes del 2.º corte (sáb 12-dic, 23:59 CDMX)- CLABE propia: alta iniciada el 17-nov («Procesando», hasta 5 días hábiles); NO VERIFICADO su estado actual. La demo pública necesita la tuya en `ACTIVE`.
 - Probar con pago real los casos tardío, duplicado y consulta fallida (el reenvío ya se probó en H9; hoy solo con pey simulado).
