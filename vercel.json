@@ -3,7 +3,6 @@
   "rewrites": [
     { "source": "/", "destination": "/cashier.html" },
     { "source": "/pay/:token", "destination": "/pay.html" },
-    { "source": "/pagar/:token", "destination": "/pay.html" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/webhook", "destination": "/api/index" },
     { "source": "/health", "destination": "/api/index" }

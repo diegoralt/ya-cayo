@@ -8,12 +8,17 @@
 
 Contexto (de `STATE.md`, decisión pendiente): rutas en español `/pagar/:token`, `public/pagar.html`, `public/maqueta.html`; cambiarlas rompe enlaces de pago ya emitidos.
 
+## Corrección del pedido (2026-11-19, chat)
+> No es necesario mantener las rutas en español, estamos manejando producción como ambiente pero la solución no es algo 100% funcional por lo que no tenemos afectación al realizar el cambio
+
+Sustituye la decisión previa de conservar `/pagar/:token` como alias: se elimina.
+
 ## Qué cuenta como terminado
 - La URL pública del pagador es `/pay/:token` y la caja emite enlaces con esa ruta.
-- Un enlace ya emitido `/pagar/:token` sigue mostrando la misma página (no rompe enlaces emitidos).
+- `/pagar/:token` deja de existir (404): no hay alias en español.
 - `public/caja.html`, `public/pagar.html` y `public/maqueta.html` pasan a `cashier.html`, `pay.html` y `mockup.html`; `/` sigue abriendo la caja y `.vercelignore`, `vercel.json` y `src/server.js` lo reflejan. La maqueta sigue sin servirse (ni en Vercel ni en local).
-- `scripts/secrets-sweep.sh` consulta `/pay/x` además de `/pagar/x`.
-- La ruta nueva y el alias responden lo mismo, sin PIN y con los mismos headers de seguridad.
+- `scripts/secrets-sweep.sh` consulta `/pay/x`.
+- `/pay/:token` responde sin PIN y con los headers de seguridad.
 - Ninguna otra ruta o archivo público queda en español, y la excepción de idioma desaparece de `CLAUDE.md`, `AGENTS.md`, `REVIEW.md` y `docs/agentes.md` (queda solo la nota del alias heredado).
 - `node --test` en verde, con prueba de ambas rutas y del `vercel.json`.
 - No se despliega nada: Production se redespliega aparte, cuando Diego lo pida.
@@ -26,4 +31,3 @@ Contexto (de `STATE.md`, decisión pendiente): rutas en español `/pagar/:token`
 - Textos visibles a la persona usuaria (siguen en español).
 - Docs históricos en `docs/changes/` (no se reescriben).
 - Redesplegar Production y tocar Vercel o Supabase.
-- Retirar el alias `/pagar/:token` (decisión futura).

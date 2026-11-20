@@ -3,7 +3,7 @@
 > Punto de retomada corto; se sobrescribe, no se acumula. El historial de decisiones vive en `docs/changes/` y en git.
 
 ## Siguiente acción
-1. Integrar el PR `chore/english-routes` (`docs/changes/2026-11-19-english-payer-route/`): `/pay/:token` con alias `/pagar/:token` indefinido, archivos públicos en inglés, excepción de idioma retirada. Codex sin hallazgos y conversaciones resueltas antes de mergear.
+1. Integrar el PR `chore/english-routes` (`docs/changes/2026-11-19-english-payer-route/`): `/pay/:token` (sin alias en español, decisión de Diego: aún no hay enlaces que preservar), archivos públicos en inglés, excepción de idioma retirada. Codex sin hallazgos y conversaciones resueltas antes de mergear.
 2. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
 3. Redesplegar Production solo cuando Diego lo pida (código desplegado previo a los fixes; migración `20261119000000` ya aplicada). Revisar entonces variables de Vercel; el redespliegue es lo que hace efectiva la ruta `/pay/:token`.
 

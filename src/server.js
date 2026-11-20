@@ -126,7 +126,7 @@ export function createAppServer(opts) {
   const srv = createServer((req, res) => {
     const path = req.url.split('?')[0];
     if (req.method === 'GET' && path === '/') return html(res, 'cashier.html');
-    if (req.method === 'GET' && /^\/(pay|pagar)\/[\w-]+$/.test(path)) return html(res, 'pay.html'); // ponytail: /pagar/ is the legacy alias of already-issued links; keep it indefinitely (one line)
+    if (req.method === 'GET' && /^\/pay\/[\w-]+$/.test(path)) return html(res, 'pay.html');
     return handler(req, res);
   });
   srv.headersTimeout = 10_000; srv.requestTimeout = 15_000; // ponytail: cuts slow connections (slowloris) if something arrives without a proxy
