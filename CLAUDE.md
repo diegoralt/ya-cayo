@@ -27,7 +27,7 @@ Pruebas con Postgres real: `sh scripts/pg-test.sh` (requiere Docker) antes de `n
 - Nombre: no sugerir oficialidad de pey ni Banxico; evitar «CoDi»/«pey» como marca.
 - Idioma: regla global (sistema en inglés; textos de la persona usuaria y docs en español). La URL del pagador es `/pay/:token`; no hay alias en español (la solución aún no es productiva: no hay enlaces que preservar).
 - Cambio mediano (dinero/producción): `docs/changes/AAAA-MM-DD-slug/` con la skill `medium-change` antes de código.
-- Producción (Vercel) y Supabase: nada sin aprobación de Diego; Production corre código previo a los últimos fixes hasta que él pida redesplegar.
+- Producción (Vercel) y Supabase: nada sin aprobación de Diego. Vercel está conectado a GitHub: cada merge a `main` despliega solo a Production; la revisión del PR es hoy la única compuerta.
 
 ## Continuidad de estado
 - `.claude/STATE.md` viaja **en el mismo PR del cambio** y describe intención (siguiente acción, decisiones abiertas). No copia hechos que git ya registra (SHA, «mergeado», «desplegado»).

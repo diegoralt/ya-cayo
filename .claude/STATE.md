@@ -3,12 +3,10 @@
 > Punto de retomada corto; se sobrescribe, no se acumula. El historial de decisiones vive en `docs/changes/` y en git.
 
 ## Siguiente acción
-1. Integrar el PR `chore/english-routes` (`docs/changes/2026-11-19-english-payer-route/`): rutas y páginas públicas en inglés, sin alias `/pagar/` (decisión de Diego). Mergear con squash solo con `has_unresolved_findings:false` en el último commit, hilos resueltos y orden de Diego; luego `branch-close`.
-2. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
-3. Redesplegar Production solo cuando Diego lo pida (código desplegado previo a los fixes; migración `20261119000000` ya aplicada). Revisar entonces variables de Vercel; el redespliegue es lo que hace efectiva la ruta `/pay/:token`.
+1. Rutina de mantenimiento de solo lectura (B.5, plantilla `~/.claude/templates/production/maintenance-routine.md`): no adoptada; decidir con Diego si hace falta.
+2. Recuperar el despliegue controlado a Production: hoy cada merge a `main` despliega solo (Vercel conectado a GitHub). Ajustar en Vercel (desconectar o cambiar la rama de Production) con aprobación de Diego. De paso, a los Preview les falta `DATABASE_URL`.
 
-## Pendientes del 2.º corte (sáb 12-dic, 23:59 CDMX) · venían de ESTADO.md
-- CLABE propia: alta iniciada el 17-nov («Procesando», hasta 5 días hábiles); NO VERIFICADO su estado actual. La demo pública necesita la tuya en `ACTIVE`.
+## Pendientes del 2.º corte (sáb 12-dic, 23:59 CDMX)- CLABE propia: alta iniciada el 17-nov («Procesando», hasta 5 días hábiles); NO VERIFICADO su estado actual. La demo pública necesita la tuya en `ACTIVE`.
 - Probar con pago real los casos tardío, duplicado y consulta fallida (el reenvío ya se probó en H9; hoy solo con pey simulado).
 - Versión 2 (declarada en README): agente con IA que propone el cobro; el cajero confirma, el servidor decide. Plan en `docs/changes/2026-11-15-agente-v2/`, a reescribir sobre Postgres.
 - UI pendiente de la revisión de Codex (6/6/5): reordenar la caja (recientes antes del formulario), originalidad, foco del teclado al reconstruir la lista.
