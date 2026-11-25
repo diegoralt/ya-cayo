@@ -15,5 +15,5 @@ Reversión: mismo PATCH con `autoAssignCustomDomains=true` (cada merge vuelve a 
 ## Hitos
 - [x] H1 Ajuste en `false` · valida: `vercel api /v9/projects/<id>` muestra `autoAssignCustomDomains: false`
 - [x] H2 Deploy de Production por CLI queda en espera, `promote` y `rollback` mueven ambos dominios con `/health` en 200 (24-nov)
-- [ ] H3 Ruta por merge: el merge de este PR genera un deploy de Production que no sirve los dominios · valida: `vercel inspect pey.drkingsia.com` sigue en el deploy anterior
+- [x] H3 Ruta por merge: el merge de este PR genera un deploy de Production que no sirve los dominios · valida: `vercel inspect pey.drkingsia.com` sigue en el deploy anterior
 - [ ] H4 `DATABASE_URL` de Preview apuntando a una base distinta de la de Producción (siguiente PR)
