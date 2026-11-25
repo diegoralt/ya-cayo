@@ -3,7 +3,7 @@
 > Punto de retomada corto; se sobrescribe, no se acumula. El historial de decisiones vive en `docs/changes/` y en git.
 
 ## Siguiente acción
-1. Revalidación de la propuesta de valor (`docs/changes/2026-11-24-value-proposition-review/`): fuentes oficiales verificadas en `sources.md`. Borrador 1 en `value-proposition.md`. Sigue: refutación a ciegas de Codex (`decision-review`) → ajustes al producto y a `docs/entrega/`. Sin acceso a comercios: la propuesta se declara hipótesis no validada con comercios. Capas 1 (rúbrica a ciegas) y 2 (capacidades de pey no usadas: `/codi/pn`, link de tarjeta) pendientes.
+1. Revalidación de la propuesta de valor (`docs/changes/2026-11-24-value-proposition-review/`): fuentes oficiales verificadas en `sources.md`. Borrador 2 en `value-proposition.md` (atiende la refutación de Codex: 0/1/4, todo aceptado). Sigue: decidir con Diego las opciones del 2.º corte (push CoDi, link de tarjeta, indicador por ticket) → ajustes al producto y a `docs/entrega/`. Sin acceso a comercios: la propuesta se declara hipótesis no validada con comercios. Capas 1 (rúbrica a ciegas) y 2 (capacidades de pey no usadas: `/codi/pn`, link de tarjeta) pendientes.
 2. Flujo de despliegue en dos pasos: `DATABASE_URL` de Preview apuntando a una base distinta de la de Producción (H4); ajustar la skill `release-version` a `vercel promote`.
 3. Rutina de mantenimiento de solo lectura (B.5): no adoptada; decidir con Diego si hace falta.
 

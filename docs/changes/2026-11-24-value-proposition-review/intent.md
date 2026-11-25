@@ -14,7 +14,7 @@
 1. Contra el jurado: puntuación a ciegas con la rúbrica de `docs/arranque.md`.
 2. Contra pey y CoDi: capacidades de la API no usadas.
 3. Contra el comercio: **sin acceso a comercios**; se sustituye por fuentes públicas oficiales → [`sources.md`](sources.md). La propuesta de valor se declara como hipótesis no validada con comercios.
-4. Contra el uso real: la métrica «tarjeta o efectivo» que ya registra la caja.
+4. Contra el uso real: hoy la caja solo compara QR generados contra registros de «tarjeta o efectivo»; medir adopción requiere un indicador por ticket (opción en `value-proposition.md`).
 
 ## Qué cuenta como terminado (esta parte)
 - Cada cifra que se use en la propuesta de valor o en la entrega está verificada en el documento oficial (página o cuadro), o marcada como no verificada.
