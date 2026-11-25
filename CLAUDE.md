@@ -12,7 +12,7 @@ Pruebas con Postgres real: `sh scripts/pg-test.sh` (requiere Docker) antes de `n
 
 ## Fechas (CDMX)
 - **1.er corte: domingo 15-nov-2026, 1:00 PM**. **2.º corte: sábado 12-dic-2026, 23:59** (el 14-dic son los resultados).
-- CLABE propia: alta iniciada el 17-nov, hasta 5 días hábiles con Banxico.
+- CLABE propia verificada, pero producción sigue con la CLABE de prueba: sin otra cuenta CoDi no hay con qué probar.
 
 ## 🔓 Repo PÚBLICO obligatorio
 - Nunca credenciales en el repo ni en código cliente: API key de pey, secreto del webhook, key de LLM → solo `.env` (ignorado) y `.env.example` sin valores. No leer ni tocar `.env`.
